@@ -2,12 +2,13 @@ from flask import Flask, render_template, request, jsonify, send_file
 from dotenv import load_dotenv
 import os
 from main import read_website_content
+from youtube_transcript_fetcher import get_youtube_transcript
+from system_prompts import news_explainer_system_message, youtube_transcript_shortener_system_message
 from langchain_groq import ChatGroq
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.chains import ConversationChain
 from langchain.prompts import PromptTemplate
-from kokoro_tts import generate_and_create_audio_file, generate_audio, create_audio_file
-import threading
+from kokoro_tts import generate_audio, create_audio_file
 
 load_dotenv()
 
@@ -21,153 +22,96 @@ groq_llm = ChatGroq(
     max_tokens=1000,
 )
 
-# System message for TTS-safe output
-system_message_news_explainer = """
-You are a technical news explainer.
-
-You will be given the full content of a technical news article.
-Your job is to understand the article deeply and help the user explain, summarize, and answer follow-up questions.
-
-Core responsibilities
-1) Explain the article
-
-Explain what happened, how it works, and why it matters
-
-Break down technical concepts and acronyms
-
-Add background only when necessary
-
-Assume the user is technical but not a domain expert
-
-2) Summarize on request
-
-Provide a concise summary by default
-
-Provide a detailed technical summary only if requested
-
-Stay factual and neutral
-
-3) Answer follow-up questions
-
-Maintain context across turns
-
-Use the article content and logical inference
-
-Say clearly when information is not present
-
-TTS-SAFE OUTPUT RULES (IMPORTANT)
-
-All responses will be fed directly into a text-to-speech system.
-
-Follow these rules strictly:
-
-Use plain text only
-
-Do not output:
-
-Markdown symbols (#, *, _, `)
-
-Code blocks
-
-URLs
-
-Emojis
-
-Tables
-
-Bullet symbols
-
-Avoid reading-hostile characters such as:
-
-Slashes, pipes, arrows, brackets
-
-Excessive punctuation
-
-Expand acronyms on first use
-Example: AI should be spoken as artificial intelligence
-
-Read numbers naturally
-Example: 2025 should be twenty twenty five
-
-Avoid spelling out file paths, commands, or code
-
-Prefer short, well-formed sentences
-
-Use natural pauses by sentence structure, not symbols
-
-If a technical term must be mentioned, explain it in words rather than showing syntax.
-
-Output style
-
-Clear, calm, explanatory
-
-Spoken-language friendly
-
-No formatting
-
-No meta commentary
-
-Initial response behavior
-
-When the article is first provided:
-
-Give a high-level spoken explanation
-
-Offer next options verbally, for example:
-You can ask for a short summary, a deeper explanation, or ask follow-up questions
-"""
-
-prompt_template = PromptTemplate(
-    input_variables=["history", "input"],
-    template=f"""
-    {system_message_news_explainer}
-    Conversation History:
-    {{history}}
-    User Question:
-    {{input}}
-    """
-)
-
-# Global conversation chain (in production, use session-based storage)
+# Global conversation state (in production, use session-based storage)
 window_memory_100 = ConversationBufferWindowMemory(k=100)
-conversation_chain = ConversationChain(
-    llm=groq_llm,
-    memory=window_memory_100,
-    prompt=prompt_template,
-    verbose=False
-)
+conversation_chain = None
+current_mode = None
+
+
+def create_conversation_chain(mode):
+    """Create a conversation chain with mode-specific system prompt"""
+    if mode == "news":
+        system_message = news_explainer_system_message
+    elif mode == "youtube":
+        system_message = youtube_transcript_shortener_system_message
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
+    prompt_template = PromptTemplate(
+        input_variables=["history", "input"],
+        template=f"""
+        {system_message}
+        Conversation History:
+        {{history}}
+        User Question:
+        {{input}}
+        """
+    )
+
+    return ConversationChain(
+        llm=groq_llm,
+        memory=window_memory_100,
+        prompt=prompt_template,
+        verbose=False
+    )
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 
-@app.route('/load_article', methods=['POST'])
-def load_article():
-    """Load article from URL and provide initial explanation"""
+@app.route('/load_content', methods=['POST'])
+def load_content():
+    """Load content (news article or YouTube transcript) and provide initial explanation"""
+    global conversation_chain, current_mode
+
     data = request.json
     url = data.get('url')
+    mode = data.get('mode', 'news')  # 'news' or 'youtube'
     generate_audio_flag = data.get('generate_audio', False)
-    
+
     if not url:
         return jsonify({'error': 'URL is required'}), 400
-    
+
+    if mode not in ['news', 'youtube']:
+        return jsonify({'error': 'Invalid mode. Use "news" or "youtube"'}), 400
+
     try:
-        # Load article content
-        documents = read_website_content(url)
-        if not documents:
-            return jsonify({'error': 'Could not load article from URL'}), 400
-        
-        article_content = documents[0].page_content
-        
+        # Initialize conversation chain for the selected mode
+        conversation_chain = create_conversation_chain(mode)
+        current_mode = mode
+
+        if mode == 'news':
+            # Load news article content
+            documents = read_website_content(url)
+            if not documents:
+                return jsonify({'error': 'Could not load article from URL'}), 400
+
+            content = documents[0].page_content
+            prompt = f"Here is the article content:\n\n{content}"
+
+        elif mode == 'youtube':
+            # Get YouTube transcript
+            transcript = get_youtube_transcript(url)
+
+            # Check if transcript is available
+            if transcript.startswith("No transcript available"):
+                return jsonify({
+                    'error': transcript,
+                    'success': False
+                }), 400
+
+            content = transcript
+            prompt = f"Here is the video transcript:\n\n{content}"
+
         # Get initial explanation from LLM
-        response = conversation_chain.invoke({
-            "input": f"Here is the article content:\n\n{article_content}"
-        })
-        
+        response = conversation_chain.invoke({"input": prompt})
         response_text = response['response']
         audio_file = None
-        
+
+        # Generate audio if requested (only for successful LLM processing)
+
         # Generate audio if requested
         if generate_audio_flag:
             try:
@@ -176,13 +120,13 @@ def load_article():
                 audio_file = os.path.basename(audio_file_path)
             except Exception as e:
                 print(f"Error generating audio: {e}")
-        
+
         return jsonify({
             'response': response_text,
             'audio_file': audio_file,
             'success': True
         })
-    
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -193,19 +137,19 @@ def chat():
     data = request.json
     user_input = data.get('message')
     generate_audio_flag = data.get('generate_audio', False)
-    
+
     if not user_input:
         return jsonify({'error': 'Message is required'}), 400
-    
+
     try:
         # Get response from conversation chain
         response = conversation_chain.invoke({
             "input": user_input
         })
-        
+
         response_text = response['response']
         audio_file = None
-        
+
         # Generate audio if requested
         if generate_audio_flag:
             try:
@@ -214,13 +158,13 @@ def chat():
                 audio_file = os.path.basename(audio_file_path)
             except Exception as e:
                 print(f"Error generating audio: {e}")
-        
+
         return jsonify({
             'response': response_text,
             'audio_file': audio_file,
             'success': True
         })
-    
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -230,17 +174,24 @@ def get_audio(filename):
     """Serve a specific audio file"""
     audio_dir = 'kokoro_outputs'
     file_path = os.path.join(audio_dir, filename)
-    
+
     if os.path.exists(file_path):
         return send_file(file_path, mimetype='audio/wav')
-    
+
     return jsonify({'error': 'Audio file not found'}), 404
 
 
 @app.route('/clear_conversation', methods=['POST'])
 def clear_conversation():
-    """Clear conversation memory"""
-    conversation_chain.memory.clear()
+    """Clear conversation memory and reset mode"""
+    global conversation_chain, current_mode
+    
+    if conversation_chain:
+        conversation_chain.memory.clear()
+    
+    conversation_chain = None
+    current_mode = None
+    
     return jsonify({'success': True, 'message': 'Conversation cleared'})
 
 

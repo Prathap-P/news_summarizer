@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>News Reader with TTS</title>
+    <title>Content Analyzer with TTS</title>
     <style>
         * {
             margin: 0;
@@ -42,6 +42,60 @@
         .header p {
             opacity: 0.9;
             font-size: 14px;
+        }
+        
+        .mode-selector {
+            background: white;
+            padding: 20px 30px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .mode-selector h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 16px;
+        }
+        
+        .mode-options {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .mode-option {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .mode-option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .mode-option.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+        }
+        
+        .mode-option input[type="radio"] {
+            display: none;
+        }
+        
+        .mode-option label {
+            cursor: pointer;
+            font-weight: 600;
+            color: #333;
+            display: block;
+        }
+        
+        .mode-option p {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #666;
         }
         
         .content {
@@ -230,8 +284,25 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📰 News Reader with TTS</h1>
-            <p>Paste a news article URL to analyze and discuss with AI</p>
+            <h1>📰 Content Analyzer with TTS</h1>
+            <p>Analyze news articles or YouTube videos with AI</p>
+        </div>
+        
+        <!-- Mode Selector -->
+        <div class="mode-selector">
+            <h3>Select Mode:</h3>
+            <div class="mode-options">
+                <div class="mode-option active" onclick="selectMode('news')">
+                    <input type="radio" id="modeNews" name="mode" value="news" checked>
+                    <label for="modeNews">📰 News Article</label>
+                    <p>Analyze and discuss news articles</p>
+                </div>
+                <div class="mode-option" onclick="selectMode('youtube')">
+                    <input type="radio" id="modeYoutube" name="mode" value="youtube">
+                    <label for="modeYoutube">🎥 YouTube Transcript</label>
+                    <p>Condense video transcripts</p>
+                </div>
+            </div>
         </div>
         
         <div class="content">
@@ -243,8 +314,8 @@
                         id="urlInput" 
                         placeholder="Enter news article URL (e.g., https://example.com/article)"
                     >
-                    <button class="btn btn-primary" id="loadBtn" onclick="loadArticle()">
-                        Load Article
+                    <button class="btn btn-primary" id="loadBtn" onclick="loadContent()">
+                        Load Content
                     </button>
                 </div>
             </div>
@@ -260,7 +331,7 @@
                 <input 
                     type="text" 
                     id="chatInput" 
-                    placeholder="Ask a question about the article..."
+                    placeholder="Ask a question about the content..."
                     disabled
                     onkeypress="handleKeyPress(event)"
                 >
@@ -284,6 +355,30 @@
     
     <script>
         let isLoading = false;
+        let currentMode = 'news';
+        
+        function selectMode(mode) {
+            if (isLoading) return;
+            
+            currentMode = mode;
+            
+            // Update UI
+            document.querySelectorAll('.mode-option').forEach(option => {
+                option.classList.remove('active');
+            });
+            event.target.closest('.mode-option').classList.add('active');
+            
+            // Update placeholder text
+            const urlInput = document.getElementById('urlInput');
+            if (mode === 'news') {
+                urlInput.placeholder = 'Enter news article URL (e.g., https://example.com/article)';
+            } else if (mode === 'youtube') {
+                urlInput.placeholder = 'Enter YouTube video URL (e.g., https://youtube.com/watch?v=...)';
+            }
+            
+            // Check the radio button
+            document.getElementById(`mode${mode.charAt(0).toUpperCase() + mode.slice(1)}`).checked = true;
+        }
         
         function showStatus(message, type = 'info') {
             const statusDiv = document.getElementById('statusMessage');
@@ -335,7 +430,7 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
         
-        async function loadArticle() {
+        async function loadContent() {
             const urlInput = document.getElementById('urlInput');
             const url = urlInput.value.trim();
             
@@ -351,18 +446,20 @@
             loadBtn.disabled = true;
             loadBtn.innerHTML = '<span class="loading"></span>';
             
-            showStatus('Loading article...', 'info');
+            const loadingMessage = currentMode === 'news' ? 'Loading article...' : 'Loading transcript...';
+            showStatus(loadingMessage, 'info');
             
             const generateAudio = document.getElementById('audioCheckbox').checked;
             
             try {
-                const response = await fetch('/load_article', {
+                const response = await fetch('/load_content', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ 
                         url,
+                        mode: currentMode,
                         generate_audio: generateAudio
                     })
                 });
@@ -371,20 +468,21 @@
                 
                 if (data.success) {
                     addMessage(data.response, false, data.audio_file);
-                    showStatus('Article loaded successfully!', 'success');
+                    const successMessage = currentMode === 'news' ? 'Article loaded successfully!' : 'Transcript loaded successfully!';
+                    showStatus(successMessage, 'success');
                     
                     // Enable chat input
                     document.getElementById('chatInput').disabled = false;
                     document.getElementById('sendBtn').disabled = false;
                 } else {
-                    showStatus(data.error || 'Failed to load article', 'error');
+                    showStatus(data.error || 'Failed to load content', 'error');
                 }
             } catch (error) {
                 showStatus('Error: ' + error.message, 'error');
             } finally {
                 isLoading = false;
                 loadBtn.disabled = false;
-                loadBtn.textContent = 'Load Article';
+                loadBtn.textContent = 'Load Content';
             }
         }
         
@@ -452,6 +550,7 @@
                     document.getElementById('chatContainer').innerHTML = '';
                     document.getElementById('chatInput').disabled = true;
                     document.getElementById('sendBtn').disabled = true;
+                    document.getElementById('urlInput').value = '';
                     showStatus('Conversation cleared', 'success');
                 }
             } catch (error) {
