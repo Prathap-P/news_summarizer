@@ -394,7 +394,7 @@
             }
         }
         
-        function addMessage(content, isUser = false, audioFile = null) {
+        function addMessage(content, isUser = false, audioFile = null, tokenUsage = null) {
             const chatContainer = document.getElementById('chatContainer');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'message-user' : 'message-assistant'}`;
@@ -409,6 +409,14 @@
             
             messageDiv.appendChild(label);
             messageDiv.appendChild(contentDiv);
+            
+            // Add token usage info if available
+            if (tokenUsage && !isUser) {
+                const tokenDiv = document.createElement('div');
+                tokenDiv.style.cssText = 'margin-top: 8px; padding: 8px 12px; background: #e8f4f8; border-left: 3px solid #667eea; font-size: 13px; color: #555; border-radius: 4px;';
+                tokenDiv.innerHTML = `📊 <strong>Tokens:</strong> Prompt: <strong>${tokenUsage.prompt_tokens}</strong> | Completion: <strong>${tokenUsage.completion_tokens}</strong> | Total: <strong>${tokenUsage.total_tokens}</strong>`;
+                messageDiv.appendChild(tokenDiv);
+            }
             
             // Add audio player if audio file is provided
             if (audioFile && !isUser) {
@@ -468,6 +476,14 @@
                     // Display the raw content as assistant message
                     const contentType = currentMode === 'news' ? 'Article' : 'Transcript';
                     addMessage(`${contentType} Content:\n\n${data.content}`, false);
+                    
+                    // Display word count
+                    if (data.word_count) {
+                        const wordCountDiv = document.createElement('div');
+                        wordCountDiv.style.cssText = 'margin: 10px 0; padding: 10px; background: #e8f4f8; border-left: 3px solid #667eea; font-size: 14px; color: #555; border-radius: 4px; text-align: center;';
+                        wordCountDiv.innerHTML = `📝 Content loaded: <strong>${data.word_count.toLocaleString()}</strong> words`;
+                        document.getElementById('chatContainer').appendChild(wordCountDiv);
+                    }
                     
                     // Show analyze button
                     showAnalyzeButton();
@@ -535,7 +551,7 @@
                         buttonContainer.remove();
                     }
                     
-                    addMessage(data.response, false, data.audio_file);
+                    addMessage(data.response, false, data.audio_file, data.token_usage);
                     
                     // Enable chat input after analysis
                     document.getElementById('chatInput').disabled = false;
@@ -592,7 +608,7 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    addMessage(data.response, false, data.audio_file);
+                    addMessage(data.response, false, data.audio_file, data.token_usage);
                     
                     if (data.audio_file) {
                         showStatus('Response with audio ready!', 'success');
