@@ -386,7 +386,8 @@
             statusDiv.innerHTML = message;
             statusDiv.style.display = 'block';
             
-            if (type === 'success' || type === 'error') {
+            // Only auto-hide success messages, not errors
+            if (type === 'success') {
                 setTimeout(() => {
                     statusDiv.style.display = 'none';
                 }, 5000);
@@ -449,8 +450,6 @@
             const loadingMessage = currentMode === 'news' ? 'Loading article...' : 'Loading transcript...';
             showStatus(loadingMessage, 'info');
             
-            const generateAudio = document.getElementById('audioCheckbox').checked;
-            
             try {
                 const response = await fetch('/load_content', {
                     method: 'POST',
@@ -459,21 +458,22 @@
                     },
                     body: JSON.stringify({ 
                         url,
-                        mode: currentMode,
-                        generate_audio: generateAudio
+                        mode: currentMode
                     })
                 });
                 
                 const data = await response.json();
                 
                 if (data.success) {
-                    addMessage(data.response, false, data.audio_file);
-                    const successMessage = currentMode === 'news' ? 'Article loaded successfully!' : 'Transcript loaded successfully!';
-                    showStatus(successMessage, 'success');
+                    // Display the raw content as assistant message
+                    const contentType = currentMode === 'news' ? 'Article' : 'Transcript';
+                    addMessage(`${contentType} Content:\n\n${data.content}`, false);
                     
-                    // Enable chat input
-                    document.getElementById('chatInput').disabled = false;
-                    document.getElementById('sendBtn').disabled = false;
+                    // Show analyze button
+                    showAnalyzeButton();
+                    
+                    const successMessage = currentMode === 'news' ? 'Article loaded! Click the button to analyze.' : 'Transcript loaded! Click the button to summarize.';
+                    showStatus(successMessage, 'success');
                 } else {
                     showStatus(data.error || 'Failed to load content', 'error');
                 }
@@ -486,6 +486,81 @@
             }
         }
         
+        function showAnalyzeButton() {
+            const chatContainer = document.getElementById('chatContainer');
+            const buttonContainer = document.createElement('div');
+            buttonContainer.id = 'analyze-button-container';
+            buttonContainer.style.cssText = 'text-align: center; padding: 20px; margin: 10px 0;';
+            
+            const analyzeBtn = document.createElement('button');
+            analyzeBtn.textContent = currentMode === 'news' ? '📰 Analyze Article' : '🎬 Summarize Transcript';
+            analyzeBtn.className = 'btn btn-primary';
+            analyzeBtn.style.cssText = 'padding: 12px 30px; font-size: 16px; cursor: pointer;';
+            analyzeBtn.onclick = analyzeContent;
+            
+            buttonContainer.appendChild(analyzeBtn);
+            chatContainer.appendChild(buttonContainer);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function analyzeContent() {
+            const buttonContainer = document.getElementById('analyze-button-container');
+            const analyzeBtn = buttonContainer?.querySelector('button');
+            
+            if (analyzeBtn) {
+                analyzeBtn.disabled = true;
+                analyzeBtn.innerHTML = '<span class="loading"></span> Analyzing...';
+            }
+
+            isLoading = true;
+            showStatus(currentMode === 'news' ? 'Analyzing article...' : 'Summarizing transcript...', 'info');
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: 'analyze',
+                        generate_audio: document.getElementById('audioCheckbox').checked
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Remove button container on success
+                    if (buttonContainer) {
+                        buttonContainer.remove();
+                    }
+                    
+                    addMessage(data.response, false, data.audio_file);
+                    
+                    // Enable chat input after analysis
+                    document.getElementById('chatInput').disabled = false;
+                    document.getElementById('sendBtn').disabled = false;
+                    showStatus('Analysis complete! You can now ask questions.', 'success');
+                } else {
+                    // Restore button on error
+                    if (analyzeBtn) {
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.textContent = currentMode === 'news' ? '📰 Analyze Article' : '🎬 Summarize Transcript';
+                    }
+                    showStatus('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                // Restore button on error
+                if (analyzeBtn) {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.textContent = currentMode === 'news' ? '📰 Analyze Article' : '🎬 Summarize Transcript';
+                }
+                showStatus('Error analyzing content: ' + error.message, 'error');
+            } finally {
+                isLoading = false;
+            }
+        }
+
         async function sendMessage() {
             const chatInput = document.getElementById('chatInput');
             const message = chatInput.value.trim();

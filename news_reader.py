@@ -27,7 +27,6 @@ def summarize_article(content):
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.chains import ConversationChain
 from langchain.prompts import PromptTemplate
-from langchain.callbacks import get_openai_callback
 from kokoro_tts import generate_and_create_audio_file
 
 # %%

@@ -63,13 +63,12 @@ def index():
 
 @app.route('/load_content', methods=['POST'])
 def load_content():
-    """Load content (news article or YouTube transcript) and provide initial explanation"""
+    """Load content (news article or YouTube transcript) and return raw content"""
     global conversation_chain, current_mode
 
     data = request.json
     url = data.get('url')
     mode = data.get('mode', 'news')  # 'news' or 'youtube'
-    generate_audio_flag = data.get('generate_audio', False)
 
     if not url:
         return jsonify({'error': 'URL is required'}), 400
@@ -89,41 +88,28 @@ def load_content():
                 return jsonify({'error': 'Could not load article from URL'}), 400
 
             content = documents[0].page_content
-            prompt = f"Here is the article content:\n\n{content}"
 
         elif mode == 'youtube':
             # Get YouTube transcript
-            transcript = get_youtube_transcript(url)
+            content = get_youtube_transcript(url)
 
-            # Check if transcript is available
-            if transcript.startswith("No transcript available"):
+            # Check if transcript fetch failed
+            if content.startswith("No transcript available") or content.startswith("Error fetching") or content.startswith("Invalid YouTube"):
                 return jsonify({
-                    'error': transcript,
+                    'error': content,
                     'success': False
                 }), 400
 
-            content = transcript
-            prompt = f"Here is the video transcript:\n\n{content}"
+        # Store the content in conversation memory for context
+        conversation_chain.memory.save_context(
+            {"input": f"Here is the {'article' if mode == 'news' else 'video transcript'} content:\n\n{content}"},
+            {"output": "I have received and analyzed the content. I'm ready to answer your questions about it."}
+        )
 
-        # Get initial explanation from LLM
-        response = conversation_chain.invoke({"input": prompt})
-        response_text = response['response']
-        audio_file = None
-
-        # Generate audio if requested (only for successful LLM processing)
-
-        # Generate audio if requested
-        if generate_audio_flag:
-            try:
-                audio = generate_audio(response_text)
-                audio_file_path = create_audio_file(audio)
-                audio_file = os.path.basename(audio_file_path)
-            except Exception as e:
-                print(f"Error generating audio: {e}")
-
+        # Return the raw content to display to user
         return jsonify({
-            'response': response_text,
-            'audio_file': audio_file,
+            'content': content,
+            'mode': mode,
             'success': True
         })
 
@@ -148,6 +134,18 @@ def chat():
         })
 
         response_text = response['response']
+        
+        # Get token usage if available
+        token_usage = None
+        # if hasattr(groq_llm, 'last_response') and groq_llm.last_response:
+        #     usage = groq_llm.last_response.get('usage', {})
+        #     if usage:
+        #         token_usage = {
+        #             'prompt_tokens': usage.get('prompt_tokens', 0),
+        #             'completion_tokens': usage.get('completion_tokens', 0),
+        #             'total_tokens': usage.get('total_tokens', 0)
+        #         }
+        
         audio_file = None
 
         # Generate audio if requested
@@ -162,6 +160,7 @@ def chat():
         return jsonify({
             'response': response_text,
             'audio_file': audio_file,
+            'token_usage': token_usage,
             'success': True
         })
 
@@ -196,4 +195,4 @@ def clear_conversation():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", debug=True, port=5000)
