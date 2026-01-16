@@ -292,13 +292,13 @@
         <div class="mode-selector">
             <h3>Select Mode:</h3>
             <div class="mode-options">
-                <div class="mode-option active" onclick="selectMode('news')">
-                    <input type="radio" id="modeNews" name="mode" value="news" checked>
+                <div class="mode-option" onclick="selectMode('news')">
+                    <input type="radio" id="modeNews" name="mode" value="news">
                     <label for="modeNews">📰 News Article</label>
                     <p>Analyze and discuss news articles</p>
                 </div>
-                <div class="mode-option" onclick="selectMode('youtube')">
-                    <input type="radio" id="modeYoutube" name="mode" value="youtube">
+                <div class="mode-option active" onclick="selectMode('youtube')">
+                    <input type="radio" id="modeYoutube" name="mode" value="youtube" checked>
                     <label for="modeYoutube">🎥 YouTube Transcript</label>
                     <p>Condense video transcripts</p>
                 </div>
@@ -355,7 +355,7 @@
     
     <script>
         let isLoading = false;
-        let currentMode = 'news';
+        let currentMode = 'youtube';
         
         function selectMode(mode) {
             if (isLoading) return;
@@ -405,7 +405,39 @@
             
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
+            contentDiv.style.position = 'relative';
             contentDiv.textContent = content;
+            
+            // Add copy button
+            const copyBtn = document.createElement('button');
+            copyBtn.innerHTML = '📋';
+            copyBtn.title = 'Copy to clipboard';
+            copyBtn.style.cssText = 'position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 14px; opacity: 0.7; transition: opacity 0.2s;';
+            copyBtn.onmouseover = () => copyBtn.style.opacity = '1';
+            copyBtn.onmouseout = () => copyBtn.style.opacity = '0.7';
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(content).then(() => {
+                    copyBtn.innerHTML = '✓';
+                    copyBtn.style.background = '#4caf50';
+                    copyBtn.style.color = 'white';
+                    setTimeout(() => {
+                        copyBtn.innerHTML = '📋';
+                        copyBtn.style.background = 'rgba(255,255,255,0.9)';
+                        copyBtn.style.color = 'inherit';
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    copyBtn.innerHTML = '✗';
+                    copyBtn.style.background = '#f44336';
+                    copyBtn.style.color = 'white';
+                    setTimeout(() => {
+                        copyBtn.innerHTML = '📋';
+                        copyBtn.style.background = 'rgba(255,255,255,0.9)';
+                        copyBtn.style.color = 'inherit';
+                    }, 2000);
+                });
+            };
+            contentDiv.appendChild(copyBtn);
             
             messageDiv.appendChild(label);
             messageDiv.appendChild(contentDiv);

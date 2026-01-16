@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_file
 from dotenv import load_dotenv
 import os
+import re
 from main import read_website_content
 from youtube_transcript_fetcher import get_youtube_transcript
 from system_prompts import news_explainer_system_message, youtube_transcript_shortener_system_message
@@ -34,14 +35,54 @@ gemma_local_llm = ChatOpenAI(
 nemotron_local_llm = ChatOpenAI(
     base_url="http://localhost:1234/v1",
     api_key="test",
+    temperature=0.3,
+    model="nvidia/nemotron-3-nano",
+    top_p= 0.6,
+    max_completion_tokens= -1,
+    model_kwargs= {
+        "frequency_penalty": 0.5, # Heavily discourages "The speaker says..." loops
+        "presence_penalty": 0.3,  # Encourages introducing new topics/facts
+    }
+)
+
+deepseekR1_local_llm = ChatOpenAI(
+    base_url="http://localhost:1234/v1",
+    api_key="test",
     temperature=0.7,
-    model="nvidia/nemotron-3-nano"
+    model="deepseek/deepseek-r1-0528-qwen3-8b"
+)
+
+gpt_oss_20b_local_llm = ChatOpenAI(
+    base_url="http://localhost:1234/v1",
+    api_key="lm-studio",
+    model="openai/gpt-oss-20b",
+    extra_body={"reasoning_effort": "high"},
+    max_completion_tokens=12800,
+    temperature=0.5,
+    # streaming=True,
 )
 
 # Global conversation state (in production, use session-based storage)
 window_memory_100 = ConversationBufferWindowMemory(k=100)
 conversation_chain = None
 current_mode = None
+
+
+def remove_thinking_tokens(text):
+    """Remove thinking tokens and related patterns from LLM response"""
+    # Remove <think>...</think> tags and their content
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    # Remove orphaned closing </think> tags
+    text = re.sub(r'</think>', '', text, flags=re.IGNORECASE)
+    # Remove orphaned opening <think> tags
+    text = re.sub(r'<think>', '', text, flags=re.IGNORECASE)
+    # Remove thinking: ... patterns
+    text = re.sub(r'thinking:.*?(?=\n\n|$)', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # Remove [thinking] ... [/thinking] patterns
+    text = re.sub(r'\[thinking\].*?\[/thinking\]', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # Clean up extra whitespace
+    text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
+    return text.strip()
 
 
 def create_conversation_chain(mode):
@@ -173,6 +214,10 @@ def chat():
             }
 
         response_text = response['response']
+        
+        # Remove thinking tokens from response
+        response_text = remove_thinking_tokens(response_text)
+        
         print(f"[SUCCESS] LLM response generated. Length: {len(response_text)} characters")
         print(f"[TOKENS] Prompt: {token_usage['prompt_tokens']}, Completion: {token_usage['completion_tokens']}, Total: {token_usage['total_tokens']}")
         
