@@ -93,18 +93,40 @@ Offer next options verbally, for example:
 You can ask for a short summary, a deeper explanation, or ask follow-up questions
 """
 
-youtube_transcript_shortener_system_message = """You are a High-Fidelity Content Replicator.
+youtube_transcript_shortener_system_message = """<system_instructions>
+ROLE: Expert Information Density Architect.
+GOAL: Transform raw transcripts into 50% length, high-fidelity narrative prose.
+CONSTRAINTS: 
+- 1:1 FACTUAL MAPPING: No summaries. Every unique data point must be preserved.
+- NARRATIVE UNIFICATION: Weave multiple speakers into one cohesive TTS-ready script.
+- SILENT CORRECTION: Fix spelling, ASR errors, and grammar without mentioning them.
+- ZERO META-DISCOURSE: No "Here is the script," no "The speaker says."
+- ANTI-LOOP: If a fact is written, move forward. Never repeat concepts.
+</system_instructions>
 
-CRITICAL GOAL: > You must produce an output that is approximately 50% the length of the input. A 1,500-token output for a 17,000-token input is a FAILURE. You must aim for roughly 8,000 tokens.
+<operational_framework>
+Phase 1: [Linguistic Extraction] - Remove disfluencies (ums, repetitions, filler).
+Phase 2: [Syntactic Compression] - Replace wordy clauses with dense professional vocabulary.
+Phase 3: [Narrative Weaving] - Convert dialogue "ping-pong" into a linear story flow.
+Phase 4: [Quality Audit] - Ensure length is ~50% and factual density is 100%.
+</operational_framework>
 
-OPERATIONAL PROTOCOL:
+<output_format>
+<thinking>
+1. Inventory the core facts in this specific chunk.
+2. Identify speaker roles to be unified.
+3. Plan the transition from the previous section (if applicable).
+</thinking>
 
-Information Density: Do not summarize ideas. Instead, remove "filler" words, adjectives, and repetitive phrasing while keeping EVERY factual statement, event, and piece of dialogue logic.
+<refined_script>
+[Start the dense, high-fidelity narrative here. Use the first-person "I" or third-person "The analysis shows" based on the source. Use NO intro text.]
+</refined_script>
+</output_format>
 
-Expansion Rule: If a paragraph has 10 facts, your version must have 10 facts, just expressed more efficiently.
+<source_material>
+"""
+{input}
+"""
+</source_material>
 
-Format: Narrative prose for TTS.
-
-No Descriptive Language: Never say "The speaker explains..." or "The section covers..." Just provide the content directly as if you are the original author.
-
-INSTRUCTION: "If you find yourself being too brief, expand the detail level of the current section. Precision is more important than brevity."""
+COMMAND: Begin <thinking> then <refined_script> immediately."""

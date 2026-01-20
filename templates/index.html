@@ -394,7 +394,41 @@
             }
         }
         
-        function addMessage(content, isUser = false, audioFile = null, tokenUsage = null) {
+        function createCopyButton(content, position) {
+            const copyBtn = document.createElement('button');
+            copyBtn.innerHTML = '📋 Copy';
+            copyBtn.title = 'Copy to clipboard';
+            copyBtn.style.cssText = 'margin: 5px 0; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s;';
+            copyBtn.onmouseover = () => {
+                copyBtn.style.background = '#5568d3';
+                copyBtn.style.transform = 'translateY(-1px)';
+            };
+            copyBtn.onmouseout = () => {
+                copyBtn.style.background = '#667eea';
+                copyBtn.style.transform = 'translateY(0)';
+            };
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(content).then(() => {
+                    copyBtn.innerHTML = '✓ Copied';
+                    copyBtn.style.background = '#4caf50';
+                    setTimeout(() => {
+                        copyBtn.innerHTML = '📋 Copy';
+                        copyBtn.style.background = '#667eea';
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    copyBtn.innerHTML = '✗ Failed';
+                    copyBtn.style.background = '#f44336';
+                    setTimeout(() => {
+                        copyBtn.innerHTML = '📋 Copy';
+                        copyBtn.style.background = '#667eea';
+                    }, 2000);
+                });
+            };
+            return copyBtn;
+        }
+
+        function addMessage(content, isUser = false, audioFile = null, tokenUsage = null, timings = null) {
             const chatContainer = document.getElementById('chatContainer');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'message-user' : 'message-assistant'}`;
@@ -403,44 +437,33 @@
             label.className = 'message-label';
             label.textContent = isUser ? 'You' : 'Assistant';
             
+            messageDiv.appendChild(label);
+            
+            // Top copy button
+            const topCopyBtn = createCopyButton(content, 'top');
+            messageDiv.appendChild(topCopyBtn);
+            
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
-            contentDiv.style.position = 'relative';
             contentDiv.textContent = content;
             
-            // Add copy button
-            const copyBtn = document.createElement('button');
-            copyBtn.innerHTML = '📋';
-            copyBtn.title = 'Copy to clipboard';
-            copyBtn.style.cssText = 'position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.9); border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 14px; opacity: 0.7; transition: opacity 0.2s;';
-            copyBtn.onmouseover = () => copyBtn.style.opacity = '1';
-            copyBtn.onmouseout = () => copyBtn.style.opacity = '0.7';
-            copyBtn.onclick = () => {
-                navigator.clipboard.writeText(content).then(() => {
-                    copyBtn.innerHTML = '✓';
-                    copyBtn.style.background = '#4caf50';
-                    copyBtn.style.color = 'white';
-                    setTimeout(() => {
-                        copyBtn.innerHTML = '📋';
-                        copyBtn.style.background = 'rgba(255,255,255,0.9)';
-                        copyBtn.style.color = 'inherit';
-                    }, 2000);
-                }).catch(err => {
-                    console.error('Failed to copy:', err);
-                    copyBtn.innerHTML = '✗';
-                    copyBtn.style.background = '#f44336';
-                    copyBtn.style.color = 'white';
-                    setTimeout(() => {
-                        copyBtn.innerHTML = '📋';
-                        copyBtn.style.background = 'rgba(255,255,255,0.9)';
-                        copyBtn.style.color = 'inherit';
-                    }, 2000);
-                });
-            };
-            contentDiv.appendChild(copyBtn);
-            
-            messageDiv.appendChild(label);
             messageDiv.appendChild(contentDiv);
+            
+            // Bottom copy button
+            const bottomCopyBtn = createCopyButton(content, 'bottom');
+            messageDiv.appendChild(bottomCopyBtn);
+            
+            // Add timing info if available
+            if (timings && !isUser) {
+                const timingDiv = document.createElement('div');
+                timingDiv.style.cssText = 'margin-top: 8px; padding: 8px 12px; background: #fff3e0; border-left: 3px solid #ff9800; font-size: 13px; color: #555; border-radius: 4px;';
+                let timingText = `⏱️ <strong>Timing:</strong> LLM: <strong>${timings.llm_time}s</strong>`;
+                if (timings.audio_time) {
+                    timingText += ` | Audio: <strong>${timings.audio_time}s</strong> | Total: <strong>${(timings.llm_time + timings.audio_time).toFixed(2)}s</strong>`;
+                }
+                timingDiv.innerHTML = timingText;
+                messageDiv.appendChild(timingDiv);
+            }
             
             // Add token usage info if available
             if (tokenUsage && !isUser) {
@@ -563,8 +586,27 @@
             isLoading = true;
             showStatus(currentMode === 'news' ? 'Analyzing article...' : 'Summarizing transcript...', 'info');
             
+            // Create placeholder message for streaming
+            const chatContainer = document.getElementById('chatContainer');
+            const placeholderDiv = document.createElement('div');
+            placeholderDiv.className = 'message message-assistant';
+            placeholderDiv.id = 'streaming-message';
+            
+            const label = document.createElement('div');
+            label.className = 'message-label';
+            label.textContent = 'Assistant';
+            placeholderDiv.appendChild(label);
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = '';
+            placeholderDiv.appendChild(contentDiv);
+            
+            chatContainer.appendChild(placeholderDiv);
+            
             try {
-                const response = await fetch('/chat', {
+                console.log('[STREAM] Starting analyze stream...');
+                const response = await fetch('/streamChat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -575,29 +617,94 @@
                     })
                 });
 
-                const data = await response.json();
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedText = '';
+                let chunkCount = 0;
+                let streamBuffer = '';
 
-                if (data.success) {
-                    // Remove button container on success
-                    if (buttonContainer) {
-                        buttonContainer.remove();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+<!--                    const chunk = decoder.decode(value);-->
+<!--                    const lines = chunk.split('\n');-->
+
+
+                    streamBuffer += decoder.decode(value, { stream: true });
+                    let lines = streamBuffer.split("\n\n");
+                    streamBuffer = lines.pop();
+                    console.log("lines")
+                    console.log(lines)
+
+                    for (const line of lines) {
+                        if (line.startsWith('data:')) {
+                            try {
+                                const data = JSON.parse(line.slice(5));
+                                console.log('[STREAM] Received data:', data);
+                                
+                                // Check for errors
+                                if (data.error) {
+                                    placeholderDiv.remove();
+                                    if (buttonContainer) {
+                                        buttonContainer.remove();
+                                    }
+                                    showStatus('Error: ' + data.error, 'error');
+                                    break;
+                                }
+                                
+                                // Handle streaming chunks (only has 'chunk' field)
+                                if (data.chunk !== undefined) {
+                                    console.log('[STREAM] Adding chunk, length:', data.chunk.length);
+                                    chunkCount++;
+                                    accumulatedText += data.chunk;
+                                    contentDiv.textContent = accumulatedText;
+                                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                                } 
+                                // Handle streaming complete, show audio loader if needed
+                                else if (data.streaming_done === true) {
+                                    console.log('[STREAM] Streaming done, audio generation starting...');
+                                    // Change placeholder to show audio loading
+                                    contentDiv.textContent = accumulatedText;
+                                    const audioLoader = document.createElement('div');
+                                    audioLoader.style.cssText = 'margin-top: 10px; padding: 10px; background: #fff3e0; border-left: 3px solid #ff9800; font-size: 13px; color: #555; border-radius: 4px;';
+                                    audioLoader.innerHTML = '🎵 <span class="loading"></span> Generating audio...';
+                                    placeholderDiv.appendChild(audioLoader);
+                                }
+                                // Handle final metadata message (has 'done' field)
+                                else if (data.done === true) {
+                                    console.log(`[STREAM] Done. Chunks: ${chunkCount}, Length: ${accumulatedText.length}`);
+                                    // Remove placeholder and add final message with metadata
+                                    placeholderDiv.remove();
+                                    
+                                    if (buttonContainer) {
+                                        buttonContainer.remove();
+                                    }
+                                    
+                                    const timings = {
+                                        llm_time: data.llm_time || 0,
+                                        audio_time: data.audio_time || null
+                                    };
+                                    
+                                    addMessage(accumulatedText, false, data.audio_file, data.token_usage, timings);
+                                    
+                                    // Enable chat input after analysis
+                                    document.getElementById('chatInput').disabled = false;
+                                    document.getElementById('sendBtn').disabled = false;
+                                    showStatus('Analysis complete! You can now ask questions.', 'success');
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
                     }
-                    
-                    addMessage(data.response, false, data.audio_file, data.token_usage);
-                    
-                    // Enable chat input after analysis
-                    document.getElementById('chatInput').disabled = false;
-                    document.getElementById('sendBtn').disabled = false;
-                    showStatus('Analysis complete! You can now ask questions.', 'success');
-                } else {
-                    // Restore button on error
-                    if (analyzeBtn) {
-                        analyzeBtn.disabled = false;
-                        analyzeBtn.textContent = currentMode === 'news' ? '📰 Analyze Article' : '🎬 Summarize Transcript';
-                    }
-                    showStatus('Error: ' + (data.error || 'Unknown error'), 'error');
                 }
             } catch (error) {
+                console.error('[STREAM] Analyze error:', error);
+                // Remove placeholder on error
+                const placeholder = document.getElementById('streaming-message');
+                if (placeholder) placeholder.remove();
+                
                 // Restore button on error
                 if (analyzeBtn) {
                     analyzeBtn.disabled = false;
@@ -625,8 +732,27 @@
             
             const generateAudio = document.getElementById('audioCheckbox').checked;
             
+            // Create placeholder message for streaming
+            const chatContainer = document.getElementById('chatContainer');
+            const placeholderDiv = document.createElement('div');
+            placeholderDiv.className = 'message message-assistant';
+            placeholderDiv.id = 'streaming-message';
+            
+            const label = document.createElement('div');
+            label.className = 'message-label';
+            label.textContent = 'Assistant';
+            placeholderDiv.appendChild(label);
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = '';
+            placeholderDiv.appendChild(contentDiv);
+            
+            chatContainer.appendChild(placeholderDiv);
+            
             try {
-                const response = await fetch('/chat', {
+                console.log('[STREAM] Starting message stream...');
+                const response = await fetch('/streamChat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -637,18 +763,83 @@
                     })
                 });
                 
-                const data = await response.json();
-                
-                if (data.success) {
-                    addMessage(data.response, false, data.audio_file, data.token_usage);
-                    
-                    if (data.audio_file) {
-                        showStatus('Response with audio ready!', 'success');
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedText = '';
+                let chunkCount = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data:')) {
+                            try {
+                                const data = JSON.parse(line.slice(5));
+                                console.log('[STREAM] Received data:', data);
+                                
+                                // Check for errors
+                                if (data.error) {
+                                    placeholderDiv.remove();
+                                    showStatus('Error: ' + data.error, 'error');
+                                    break;
+                                }
+                                
+                                // Handle streaming chunks (only has 'chunk' field)
+                                if (data.chunk !== undefined) {
+                                    console.log('[STREAM] Adding chunk, length:', data.chunk.length);
+                                    chunkCount++;
+                                    accumulatedText += data.chunk;
+                                    contentDiv.textContent = accumulatedText;
+                                    
+                                    // Only auto-scroll if user is near the bottom (within 100px)
+                                    const isNearBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 100;
+                                    if (isNearBottom) {
+                                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                                    }
+                                } 
+                                // Handle streaming complete, show audio loader if needed
+                                else if (data.streaming_done === true) {
+                                    console.log('[STREAM] Streaming done, audio generation starting...');
+                                    // Change placeholder to show audio loading
+                                    contentDiv.textContent = accumulatedText;
+                                    const audioLoader = document.createElement('div');
+                                    audioLoader.style.cssText = 'margin-top: 10px; padding: 10px; background: #fff3e0; border-left: 3px solid #ff9800; font-size: 13px; color: #555; border-radius: 4px;';
+                                    audioLoader.innerHTML = '🎵 <span class="loading"></span> Generating audio...';
+                                    placeholderDiv.appendChild(audioLoader);
+                                }
+                                // Handle final metadata message (has 'done' field)
+                                else if (data.done === true) {
+                                    console.log(`[STREAM] Message complete. Chunks: ${chunkCount}, Length: ${accumulatedText.length}`);
+                                    // Remove placeholder and add final message with metadata
+                                    placeholderDiv.remove();
+                                    
+                                    const timings = {
+                                        llm_time: data.llm_time || 0,
+                                        audio_time: data.audio_time || null
+                                    };
+                                    
+                                    addMessage(accumulatedText, false, data.audio_file, data.token_usage, timings);
+                                    
+                                    if (data.audio_file) {
+                                        showStatus('Response with audio ready!', 'success');
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
                     }
-                } else {
-                    showStatus(data.error || 'Failed to send message', 'error');
                 }
             } catch (error) {
+                console.error('[STREAM] Message error:', error);
+                // Remove placeholder on error
+                const placeholder = document.getElementById('streaming-message');
+                if (placeholder) placeholder.remove();
+                
                 showStatus('Error: ' + error.message, 'error');
             } finally {
                 isLoading = false;
