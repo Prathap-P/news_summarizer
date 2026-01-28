@@ -23,7 +23,7 @@ from langchain.prompts import PromptTemplate
 from langchain.callbacks import get_openai_callback
 from kokoro_tts import generate_audio, create_audio_file
 from llm_models import get_model
-from utils import remove_thinking_tokens
+from utils import remove_thinking_tokens, create_backup_file
 from email_sender import send_email_with_audio, send_email_with_attachments
 from telegram_sender import send_telegram_with_audio, send_telegram_with_attachments
 
@@ -211,14 +211,27 @@ def load_content():
                 if not telegram_success:
                     error_msg = "Failed to send content to Telegram"
                     print(f"[ERROR] {error_msg}")
+                    # Create backup file
+                    try:
+                        backup_path = create_backup_file(url, condensed_content, audio_file_path)
+                        error_msg = f"Failed to send to Telegram. Backup created at: {backup_path}"
+                        print(f"[BACKUP] {error_msg}")
+                    except Exception as backup_error:
+                        print(f"[ERROR] Failed to create backup: {backup_error}")
                     return jsonify({'error': error_msg, 'success': False}), 422
                 
                 print(f"[SUCCESS] Content sent to Telegram successfully")
             except Exception as e:
                 error_msg = f"Telegram sending failed: {e}"
                 print(f"[ERROR] {error_msg}")
-                print(f"[ERROR] {error_msg}")
-            return jsonify({'error': error_msg, 'success': False}), 422
+                # Create backup file
+                try:
+                    backup_path = create_backup_file(url, condensed_content, audio_file_path)
+                    error_msg = f"Telegram error: {e}. Backup created at: {backup_path}"
+                    print(f"[BACKUP] {error_msg}")
+                except Exception as backup_error:
+                    print(f"[ERROR] Failed to create backup: {backup_error}")
+                return jsonify({'error': error_msg, 'success': False}), 422
         
         # Step 5: Store condensed content in conversation memory for future Q&A
         # The memory now contains: system prompt (from create_runnable_chain) + condensed input
