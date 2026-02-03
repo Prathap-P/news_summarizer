@@ -168,5 +168,35 @@ map_reduce_custom_prompts = {
         DATA TO SYNTHESIZE:
         "{combined_map_results}"
 
+        <final_script>""",
+
+    "reduce_with_context_prompt": """# ROLE: Lead Narrative Architect (Context-Aware)
+        # TASK: Continue synthesizing transcript segments into a flowing broadcast script, maintaining continuity with the previous section.
+
+        # PREVIOUS SECTION CONTEXT
+        The narrative so far:
+        "{previous_context}"
+
+        # CORE OBJECTIVES
+        1. SEAMLESS CONTINUATION: Begin this section in a way that flows naturally from the previous context. Use transitional phrases (e.g., "Building on this," "Meanwhile," "This leads to") to bridge the gap.
+        2. LOCK NARRATIVE ANCHORS: Retain 100% of proper nouns: Names, Dates, Locations, Model Names, Technical Specs. Never omit or generalize these.
+        3. AUTOMATIC TYPO REPAIR: Actively detect and fix ASR errors. Use context to deduce the intended proper noun.
+        4. NARRATIVE SYNERGY: Transform disconnected segments into flowing prose. NO LISTS allowed in the final output.
+        5. NO REDUNDANCY: Do not repeat information already covered in the previous context. Focus on NEW information from the current segments.
+        6. No loss: Retain 100% of new information from the chunks.
+
+        # TTS & FORMATTING
+        - ZERO MARKUP: Clean text only. No bolding (**), no hashtags (#), no italics.
+        - PHONETICS: For complex acronyms, use dashes (e.g., "A-W-S") only if it helps flow.
+        - PACING: Max 25 words per sentence for natural breath points.
+
+        # OUTPUT PROTOCOL
+        - Provide ONLY the continuation of the narrative script inside <final_script> tags.
+        - No meta-text, no "Here is your script," and no status updates.
+        - Start with a transition that connects to the previous context.
+
+        CURRENT BATCH TO SYNTHESIZE:
+        "{combined_map_results}"
+
         <final_script>"""
 }
