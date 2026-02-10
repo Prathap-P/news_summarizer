@@ -768,6 +768,7 @@ def text_to_audio():
             }), 400
         
         print(f"[INFO] text_to_audio: Converting {len(text)} chars to audio")
+        print(f"[DEBUG] Text preview: {text[:100]}...")
         
         # For very large text, split into chunks
         MAX_CHARS = 10000
@@ -797,12 +798,19 @@ def text_to_audio():
             for idx, chunk in enumerate(chunks, 1):
                 print(f"[INFO] Processing chunk {idx}/{len(chunks)} ({len(chunk)} chars)...")
                 chunk_audio = generate_audio(chunk)
+                print(f"[DEBUG] Chunk {idx} audio shape: {chunk_audio.shape}")
                 audio_segments.append(chunk_audio)
             
             audio = np.concatenate(audio_segments)
-            print(f"[SUCCESS] All chunks processed and concatenated")
+            print(f"[SUCCESS] All chunks processed and concatenated: {audio.shape}")
         else:
+            print(f"[INFO] Generating audio directly (text < {MAX_CHARS} chars)")
             audio = generate_audio(text)
+            import numpy as np
+            print(f"[DEBUG] Generated audio shape: {audio.shape}, sum: {np.sum(np.abs(audio))}")
+        
+        if audio is None or (hasattr(audio, 'size') and audio.size == 0):
+            raise ValueError("Generated audio is empty")
         
         audio_file_path = create_audio_file(audio)
         audio_filename = os.path.basename(audio_file_path)

@@ -4,7 +4,8 @@ from system_prompts import *
 from utils import remove_thinking_tokens
 
 # Configuration
-REDUCE_BATCH_SIZE = 5  # Number of chunks to reduce per batch
+REDUCE_BATCH_SIZE = 3  # Number of chunks to reduce per batch (smaller = less hallucination)
+FINAL_CONSOLIDATION_THRESHOLD = 15000  # Chars threshold to trigger final consolidation
 
 def condense_content(content: str, current_model):
     print(f"[INFO] condense_content: Starting condensation for {len(content)} chars")
@@ -137,6 +138,36 @@ def condense_content(content: str, current_model):
         # Concatenate all batch results
         final_output = "\n\n".join(batch_results)
         print(f"[INFO] All batches combined: {len(final_output)} chars")
+        
+        # Stage 2: Final consolidation if output is still too large
+        if len(final_output) > FINAL_CONSOLIDATION_THRESHOLD:
+            print(f"[INFO] Stage 2: Final consolidation needed ({len(final_output)} > {FINAL_CONSOLIDATION_THRESHOLD} chars)")
+            print(f"[INFO] Consolidating {len(batch_results)} batch results...")
+            
+            consolidation_input = f"""
+                System:
+                {yt_transcript_shortener_system_message}
+                Input:
+                {reduce_prompt.replace('{combined_map_results}', final_output)}
+            """
+            
+            print(f"[DEBUG] Streaming final consolidation...")
+            consolidation_text = ""
+            for streamed_chunk in current_model.stream(consolidation_input):
+                if hasattr(streamed_chunk, 'content'):
+                    consolidation_text += streamed_chunk.content
+                else:
+                    consolidation_text += str(streamed_chunk)
+            
+            final_output, success = remove_thinking_tokens(consolidation_text)
+            if not success:
+                error_msg = "Failed to remove thinking tokens from final consolidation"
+                print(f"[ERROR] {error_msg}")
+                raise ValueError(error_msg)
+            
+            print(f"[SUCCESS] Final consolidation complete: {len(final_output)} chars")
+        else:
+            print(f"[INFO] No final consolidation needed ({len(final_output)} chars < {FINAL_CONSOLIDATION_THRESHOLD})")
 
     print(f"[INFO] REDUCE phase complete: {len(final_output)} chars")
     print(f"[SUCCESS] Condensation complete. Original: {len(content)} -> Final: {len(final_output)} chars")

@@ -27,19 +27,23 @@ sr = 24000
 
 # %%
 def generate_audio(text):
+    print(f"[KOKORO_TTS] Generating audio for {len(text)} chars")
     generator = pipeline(text, voice='af_heart')
     audio_segments = []
 
-    for i, (gs, ps, audio) in enumerate(generator):
-        # print(f"Segment {i}: {len(audio)} samples")
-        audio_segments.append(audio)
+    for i, result in enumerate(generator):
+        if len(result) == 3:
+            gs, ps, audio = result
+            audio_segments.append(audio)
+        else:
+            print(f"[KOKORO_TTS][WARNING] Unexpected generator output at segment {i}: {result}")
 
-    # Concatenate all segments
+    if not audio_segments:
+        print(f"[KOKORO_TTS][ERROR] No audio segments generated! Returning empty array.")
+        return np.zeros(1, dtype=np.float32)
+
     audio = np.concatenate(audio_segments)
-
-    # print(f"Total duration: {len(audio) / sr:.2f} seconds")
-    # print(f"Audio shape: {audio.shape}")
-    
+    print(f"[KOKORO_TTS] Audio generated: {audio.shape}, duration: {len(audio)/sr:.2f} seconds")
     return audio
 
 # %%
@@ -48,8 +52,11 @@ def create_audio_file(audio):
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     output_file = os.path.join(output_dir, f'kokoro_500word_{timestamp}.wav')
-    # Save audio
+    if audio is None or (hasattr(audio, 'size') and audio.size == 0):
+        print(f"[KOKORO_TTS][ERROR] Attempted to save empty audio array! Not writing file: {output_file}")
+        return output_file
     sf.write(output_file, audio, sr)
+    print(f"[KOKORO_TTS] Audio file saved: {output_file}")
     return output_file
 
 # %%
