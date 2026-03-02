@@ -37,7 +37,7 @@ window_memory_100 = ConversationBufferWindowMemory(k=100)
 conversation_chain = None
 current_mode = None
 session_history = InMemoryChatMessageHistory()
-current_model = get_model("nemotron_stream_local_llm")
+current_model = get_model("nexveridian_qwen_stream_local_llm")
 
 def check_llm_server():
     """Check if the local LLM server is running"""

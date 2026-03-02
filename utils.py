@@ -158,3 +158,66 @@ def list_backup_files() -> List[Path]:
     backup_files = [f for f in backup_dir.glob("*.txt") if f.is_file()]
     print(f"[BACKUP LIST] Found {len(backup_files)} backup files")
     return backup_files
+
+
+def compress_audio(input_path: str, bitrate: str = "64k") -> Optional[str]:
+    """
+    Compress audio file to MP3 format to reduce file size.
+    
+    Args:
+        input_path: Path to the input audio file
+        bitrate: Target bitrate for compression (default: "64k")
+                 Options: "32k", "64k", "128k", "192k"
+        
+    Returns:
+        Path to compressed audio file, or None if compression fails
+    """
+    try:
+        from pydub import AudioSegment
+        
+        input_file = Path(input_path)
+        if not input_file.exists():
+            print(f"[COMPRESS] Input file not found: {input_path}")
+            return None
+        
+        # Check if file is already small enough
+        file_size_mb = input_file.stat().st_size / (1024 * 1024)
+        print(f"[COMPRESS] Input file size: {file_size_mb:.2f} MB")
+        
+        # Create output filename
+        output_path = input_file.with_suffix('.mp3')
+        # If input is already .mp3, add _compressed suffix
+        if input_file.suffix.lower() == '.mp3':
+            output_path = input_file.with_stem(f"{input_file.stem}_compressed")
+        
+        print(f"[COMPRESS] Compressing {input_file.name} → {output_path.name} (bitrate: {bitrate})...")
+        
+        # Load audio file
+        audio = AudioSegment.from_file(str(input_path))
+        
+        # Export as MP3 with specified bitrate
+        audio.export(
+            str(output_path),
+            format="mp3",
+            bitrate=bitrate,
+            parameters=["-q:a", "2"]  # Quality setting for VBR (2 = high quality)
+        )
+        
+        # Check compressed file size
+        compressed_size_mb = output_path.stat().st_size / (1024 * 1024)
+        compression_ratio = (1 - compressed_size_mb / file_size_mb) * 100
+        
+        print(f"[COMPRESS] ✅ Compression successful!")
+        print(f"[COMPRESS]    Original: {file_size_mb:.2f} MB")
+        print(f"[COMPRESS]    Compressed: {compressed_size_mb:.2f} MB")
+        print(f"[COMPRESS]    Saved: {compression_ratio:.1f}%")
+        
+        return str(output_path)
+        
+    except ImportError:
+        print("[COMPRESS] ❌ pydub not installed. Install with: pip install pydub")
+        print("[COMPRESS] Also requires ffmpeg. Install with: brew install ffmpeg (macOS)")
+        return None
+    except Exception as e:
+        print(f"[COMPRESS] ❌ Error compressing audio: {e}")
+        return None

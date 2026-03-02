@@ -4,9 +4,17 @@ import time
 from typing import Optional, List
 from pathlib import Path
 
+# Import compress_audio from utils
+try:
+    from utils import compress_audio
+    COMPRESSION_AVAILABLE = True
+except ImportError:
+    COMPRESSION_AVAILABLE = False
+    print("[WARNING] compress_audio not available - large files will fail")
 
-# Telegram message character limit
+# Telegram limits
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+TELEGRAM_MAX_FILE_SIZE_MB = 50
 
 
 def get_discussion_group_id(channel_id: str, bot_token: str) -> Optional[str]:
@@ -139,6 +147,49 @@ def send_telegram_with_audio(
     if not audio_path.exists():
         print(f"[ERROR] Audio file not found: {audio_file_path}")
         return False
+    
+    # Check file size and compress if needed
+    file_size_mb = audio_path.stat().st_size / (1024 * 1024)
+    print(f"[INFO] Audio file size: {file_size_mb:.2f} MB")
+    
+    compressed_file = None
+    if file_size_mb > TELEGRAM_MAX_FILE_SIZE_MB:
+        print(f"[WARNING] File exceeds {TELEGRAM_MAX_FILE_SIZE_MB}MB Telegram limit")
+        
+        if not COMPRESSION_AVAILABLE:
+            print(f"[ERROR] Compression not available. Cannot send file >50MB")
+            return False
+        
+        print(f"[INFO] Attempting to compress audio...")
+        compressed_file = compress_audio(str(audio_path), bitrate="64k")
+        
+        if not compressed_file:
+            print(f"[ERROR] Compression failed. Cannot send file.")
+            return False
+        
+        # Check if compressed file is now small enough
+        compressed_size_mb = Path(compressed_file).stat().st_size / (1024 * 1024)
+        if compressed_size_mb > TELEGRAM_MAX_FILE_SIZE_MB:
+            print(f"[WARNING] Compressed file still too large ({compressed_size_mb:.2f}MB)")
+            print(f"[INFO] Trying higher compression (32k bitrate)...")
+            
+            # Try with lower bitrate
+            os.remove(compressed_file)  # Remove previous attempt
+            compressed_file = compress_audio(str(audio_path), bitrate="32k")
+            
+            if compressed_file:
+                compressed_size_mb = Path(compressed_file).stat().st_size / (1024 * 1024)
+                if compressed_size_mb > TELEGRAM_MAX_FILE_SIZE_MB:
+                    print(f"[ERROR] Even with 32k bitrate, file is {compressed_size_mb:.2f}MB (still >50MB)")
+                    os.remove(compressed_file)
+                    return False
+            else:
+                return False
+        
+        # Use compressed file
+        audio_path = Path(compressed_file)
+        audio_file_path = compressed_file
+        print(f"[SUCCESS] Using compressed audio: {compressed_size_mb:.2f} MB")
     
     try:
         text_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -328,14 +379,35 @@ def send_telegram_with_audio(
         #     })
         
         print(f"[SUCCESS] Message with audio sent successfully to Telegram")
+        
+        # Cleanup: Delete compressed file if it was created
+        if compressed_file and os.path.exists(compressed_file):
+            try:
+                os.remove(compressed_file)
+                print(f"[CLEANUP] Removed temporary compressed file: {Path(compressed_file).name}")
+            except Exception as e:
+                print(f"[WARNING] Could not remove compressed file: {e}")
+        
         return True
         
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Network error occurred: {e}")
+        # Cleanup compressed file on error
+        if compressed_file and os.path.exists(compressed_file):
+            try:
+                os.remove(compressed_file)
+            except:
+                pass
         return False
         
     except Exception as e:
         print(f"[ERROR] Unexpected error: {e}")
+        # Cleanup compressed file on error
+        if compressed_file and os.path.exists(compressed_file):
+            try:
+                os.remove(compressed_file)
+            except:
+                pass
         return False
 
 
