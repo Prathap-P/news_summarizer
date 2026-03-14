@@ -786,22 +786,26 @@
         // Initialize auto-processor on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadQueuesFromStorage();
+
+            // Acquire wake lock immediately if items were restored from a previous session
+            syncWakeLock();
+
             startAutoProcessor();
-            
-            // Save queues when user edits them
-            document.getElementById('techQueueList').addEventListener('input', saveQueuesToStorage);
-            document.getElementById('socialQueueList').addEventListener('input', saveQueuesToStorage);
-            document.getElementById('scienceQueueList').addEventListener('input', saveQueuesToStorage);
-            
+
+            // Save queues and sync wake lock when user edits them
+            ['tech', 'social', 'science'].forEach(cat => {
+                document.getElementById(`${cat}QueueList`).addEventListener('input', () => {
+                    saveQueuesToStorage();
+                    syncWakeLock();
+                });
+            });
+
             // Handle page visibility changes to resume processing if tab becomes visible
             document.addEventListener('visibilitychange', function() {
-                if (!document.hidden && autoProcessorEnabled && !isProcessing) {
-                    console.log('[AUTO-PROCESSOR] Tab became visible, checking queue...');
-                    // Reacquire wake lock if there are active queue items
-                    if (hasActiveQueueItems() && wakeLock === null) {
-                        acquireWakeLock();
-                    }
-                    processNextLink();
+                if (!document.hidden && autoProcessorEnabled) {
+                    console.log('[AUTO-PROCESSOR] Tab became visible, syncing wake lock and checking queue...');
+                    syncWakeLock();
+                    if (!isProcessing) processNextLink();
                 }
             });
         });
@@ -884,23 +888,28 @@
         // Acquire wake lock to prevent screen sleep
         async function acquireWakeLock() {
             try {
-                // Check if Wake Lock API is supported
-                if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('[WAKE-LOCK] ✅ Screen wake lock acquired');
-                    
-                    // Listen for wake lock release
-                    wakeLock.addEventListener('release', () => {
-                        console.log('[WAKE-LOCK] Screen wake lock released');
-                    });
-                } else {
+                if (!('wakeLock' in navigator)) {
                     console.log('[WAKE-LOCK] ⚠️ Wake Lock API not supported in this browser');
+                    return;
                 }
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log('[WAKE-LOCK] ✅ Screen wake lock acquired');
+
+                // When the system releases the lock (tab hidden, device idle, etc.),
+                // null the variable and immediately re-acquire if work remains.
+                wakeLock.addEventListener('release', () => {
+                    console.log('[WAKE-LOCK] Screen wake lock released by system');
+                    wakeLock = null;
+                    if (hasActiveQueueItems()) {
+                        console.log('[WAKE-LOCK] Items still in queue — re-acquiring lock...');
+                        acquireWakeLock();
+                    }
+                });
             } catch (err) {
                 console.error('[WAKE-LOCK] ❌ Failed to acquire wake lock:', err);
             }
         }
-        
+
         // Release wake lock
         async function releaseWakeLock() {
             try {
@@ -911,6 +920,16 @@
                 }
             } catch (err) {
                 console.error('[WAKE-LOCK] ❌ Failed to release wake lock:', err);
+            }
+        }
+
+        // Synchronise wake lock with actual queue state.
+        // Call this whenever queue contents or processing state may have changed.
+        async function syncWakeLock() {
+            if (hasActiveQueueItems()) {
+                if (wakeLock === null) await acquireWakeLock();
+            } else {
+                if (wakeLock !== null) await releaseWakeLock();
             }
         }
         
@@ -976,15 +995,9 @@
             // Get next URL from any queue
             const next = getNextUrlFromAllQueues();
             
-            // Manage wake lock based on queue status
-            if (hasActiveQueueItems() && wakeLock === null) {
-                acquireWakeLock();
-            } else if (!hasActiveQueueItems() && wakeLock !== null) {
-                releaseWakeLock();
-            }
-            
             if (!next) {
-                // All queues empty
+                // All queues empty - release wake lock if held
+                await syncWakeLock();
                 console.log('[AUTO-PROCESSOR] All queues empty, waiting for new items...');
                 // Check again in 5 seconds in case user adds more
                 setTimeout(processNextLink, 5000);
@@ -994,10 +1007,14 @@
             const { url, category } = next;
             console.log(`[AUTO-PROCESSOR] Processing from ${category} queue: ${url}`);
             
-            // Move URL to processing list for this category
+            // Move URL to processing list for this category BEFORE acquiring wake lock
+            // so hasActiveQueueItems() reflects reality when checked elsewhere
             const processingEl = document.getElementById(`${category}ProcessingList`);
             processingEl.value = url;
             saveQueuesToStorage();
+            
+            // Ensure wake lock is held now that processing list is populated
+            await syncWakeLock();
             
             isProcessing = true;
             
@@ -1038,10 +1055,8 @@
                 isProcessing = false;
                 saveQueuesToStorage();
                 
-                // Check if we should release wake lock (no more items in any queue)
-                if (!hasActiveQueueItems() && wakeLock !== null) {
-                    releaseWakeLock();
-                }
+                // Sync wake lock — release only if nothing is left to process
+                await syncWakeLock();
                 
                 // Process next item immediately (small delay to prevent tight loop)
                 console.log('[AUTO-PROCESSOR] Processing complete, checking for next item...');
