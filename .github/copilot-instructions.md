@@ -83,6 +83,7 @@ Format string used: `"140/251/139/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaud
 - `fetch_mode` is part of the cache key — a Whisper-forced audio run never reuses a cached transcript-API run for the same video.
 - TTL: 24 hours. Expired checkpoints purged at startup via `purge_expired_checkpoints()`.
 - `condensation_cache/` and `yt_audio/` are gitignored.
+- **Crash-safe streaming**: all 4 `current_model.stream()` loops (MAP, single-batch REDUCE, multi-batch REDUCE, final consolidation) are wrapped in `try/except Exception`. On crash: logs the error, increments the correct checkpoint retry counter (`map_retry_counts[str_idx]`, `reduce_retry_counts[key]`, or `consolidation_retries`), calls `_save()`, then raises `ValueError`. This converts silent model crashes (e.g. LM Studio `Exit code: null`) into recoverable checkpointed errors that `app.py`'s `except ValueError` block returns as 422 with `resume_progress`.
 
 ### URL Normalisation (YouTube)
 In `app.py`'s `load_content` route, before any checkpoint or I/O work:
@@ -102,6 +103,14 @@ Queue state is persisted to `localStorage`. Key behaviours:
 - A URL is removed from the queue and `saveQueuesToStorage()` is called **immediately at dequeue time** (not after processing) so a page reload cannot replay already-handed-off URLs.
 - Finished list entries show `[T]` or `[A]` prefix, plus `[CACHED:VIDEO_ID]` when a full cache hit was served.
 - `/load_content` response includes `from_cache` (bool) and `video_id` (string | null).
+- Failed list entries are written as `[T] <url> - Error: <message>` or `[A] <url> - Error: <message>`.
+
+### Retry All Failed Button (`retryAllFailed()` in `templates/index.html`)
+A single fixed button (bottom-right) handles both retry paths:
+1. **Re-queue failed URLs**: scans all three `${cat}FailedList` textareas, parses `[T]`/`[A]` prefixes via regex `/^\[(A|T)\]\s+(https?:\/\/\S+)\s*-\s*Error:/`, pushes each URL back into the correct queue textarea (`QueueList` for `[T]`, `AudioQueueList` for `[A]`). Deduplicates within a single retry action using a `Set` keyed by `url|category|fetch_mode`. Calls `saveQueuesToStorage()` **before** the network call.
+2. **Retry Telegram backups**: calls `POST /retry_failed_telegrams` (unchanged backend) to re-send `backup_content/` files.
+3. Toast shows unified result: `"X URL(s) re-queued | Telegrams — ✅ Sent: N, ❌ Failed: N"`. Shows `"Nothing to retry"` when both paths find nothing.
+- Failed list entries are **not** cleared by the retry — normal success/fail flow adds new FinishedList/FailedList entries on re-processing.
 
 ### Whisper Memory Management
 `transcribe_audio()` always releases GPU memory in a `finally` block:

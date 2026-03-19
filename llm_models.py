@@ -46,8 +46,8 @@ nemotron_stream_local_llm = ChatOpenAI(
         "min_p": 0.05,
         "repeat_penalty": 1.1
     },
-    streaming=True,
-    stream_usage=True,
+    # streaming=True,
+    # stream_usage=True,
     timeout= 3600
 )
 
@@ -66,8 +66,8 @@ nexveridian_qwen_stream_local_llm = ChatOpenAI(
         "min_p": 0.05,
         "repeat_penalty": 1.15
     },
-    streaming=True,
-    stream_usage=True,
+    # streaming=True,
+    # stream_usage=True,
     timeout=3600
 )
 
@@ -86,8 +86,8 @@ mlx_community_qwen_stream_local_llm = ChatOpenAI(
         "min_p": 0,
         "repeat_penalty": 1.15
     },
-    streaming=True,
-    stream_usage=True,
+    # streaming=True,
+    # stream_usage=True,
     timeout=3600
 )
 
@@ -105,7 +105,7 @@ gpt_oss_20b_local_llm = ChatOpenAI(
     extra_body={"reasoning_effort": "high"},
     max_completion_tokens=12800,
     temperature=0.5,
-    streaming=True,
+    # streaming=True,
 )
 
 mistral_local_llm = ChatOpenAI(
@@ -123,8 +123,8 @@ mistral_local_llm = ChatOpenAI(
         "min_p": 0.05,
         "repeat_penalty": 1.1
     },
-    streaming=True,
-    stream_usage=True,
+    # streaming=True,
+    # stream_usage=True,
     timeout=3600
 )
 

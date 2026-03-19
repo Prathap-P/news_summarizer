@@ -476,6 +476,138 @@
         .file-remove:hover {
             color: #d32f2f;
         }
+
+        /* ---- Failed Cards ---- */
+        .failed-cards-container {
+            max-height: 280px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 4px 2px;
+            min-height: 48px;
+        }
+
+        .failed-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fff;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            transition: box-shadow 0.2s;
+        }
+
+        .failed-card:hover {
+            box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+        }
+
+        .failed-thumbnail {
+            width: 100%;
+            height: 110px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .failed-thumbnail-placeholder {
+            width: 100%;
+            height: 60px;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #aaa;
+        }
+
+        .failed-card-body {
+            padding: 8px 10px;
+        }
+
+        .failed-card-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .failed-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .badge-transcript {
+            background: #e3f0ff;
+            color: #1565c0;
+        }
+
+        .badge-audio {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .failed-url {
+            font-size: 10px;
+            font-family: 'Courier New', monospace;
+            color: #444;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+
+        .failed-error {
+            font-size: 10px;
+            color: #c62828;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .failed-card-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .failed-retry-btn, .failed-dismiss-btn {
+            flex: 1;
+            padding: 5px 0;
+            font-size: 11px;
+            font-weight: 600;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .failed-retry-btn {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .failed-retry-btn:hover {
+            background: #c8e6c9;
+        }
+
+        .failed-dismiss-btn {
+            background: #f5f5f5;
+            color: #757575;
+        }
+
+        .failed-dismiss-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .failed-empty {
+            font-size: 11px;
+            color: #bbb;
+            text-align: center;
+            padding: 12px 0;
+        }
     </style>
 </head>
 <body>
@@ -512,11 +644,9 @@
             
             <div class="queue-section">
                 <div class="label">❌ Failed</div>
-                <textarea 
-                    id="techFailedList" 
-                    readonly
-                    placeholder="Failed URLs"
-                ></textarea>
+                <div id="techFailedList" class="failed-cards-container">
+                    <div class="failed-empty">No failed items</div>
+                </div>
             </div>
             
             <div class="queue-section">
@@ -560,11 +690,9 @@
             
             <div class="queue-section">
                 <div class="label">❌ Failed</div>
-                <textarea 
-                    id="socialFailedList" 
-                    readonly
-                    placeholder="Failed URLs"
-                ></textarea>
+                <div id="socialFailedList" class="failed-cards-container">
+                    <div class="failed-empty">No failed items</div>
+                </div>
             </div>
             
             <div class="queue-section">
@@ -608,11 +736,9 @@
             
             <div class="queue-section">
                 <div class="label">❌ Failed</div>
-                <textarea 
-                    id="scienceFailedList" 
-                    readonly
-                    placeholder="Failed URLs"
-                ></textarea>
+                <div id="scienceFailedList" class="failed-cards-container">
+                    <div class="failed-empty">No failed items</div>
+                </div>
             </div>
             
             <div class="queue-section">
@@ -806,6 +932,7 @@
         let isProcessing = false;
         let autoProcessorEnabled = true;
         let wakeLock = null; // Wake Lock to prevent screen sleep during processing
+        const failedData = { tech: [], social: [], science: [] };
         
         // Initialize auto-processor on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -844,7 +971,14 @@
                 document.getElementById(`${cat}QueueList`).value         = localStorage.getItem(`${cat}Queue`)         || '';
                 document.getElementById(`${cat}AudioQueueList`).value    = localStorage.getItem(`${cat}AudioQueue`)    || '';
                 document.getElementById(`${cat}ProcessingList`).value    = localStorage.getItem(`${cat}Processing`)    || '';
-                document.getElementById(`${cat}FailedList`).value        = localStorage.getItem(`${cat}Failed`)        || '';
+                try {
+                    const raw = localStorage.getItem(`${cat}Failed`) || '[]';
+                    failedData[cat] = JSON.parse(raw);
+                    if (!Array.isArray(failedData[cat])) failedData[cat] = [];
+                } catch (_) {
+                    failedData[cat] = [];
+                }
+                renderFailedCards(cat);
                 document.getElementById(`${cat}FinishedList`).value      = localStorage.getItem(`${cat}Finished`)      || '';
             });
         }
@@ -855,7 +989,7 @@
                 localStorage.setItem(`${cat}Queue`,         document.getElementById(`${cat}QueueList`).value);
                 localStorage.setItem(`${cat}AudioQueue`,    document.getElementById(`${cat}AudioQueueList`).value);
                 localStorage.setItem(`${cat}Processing`,    document.getElementById(`${cat}ProcessingList`).value);
-                localStorage.setItem(`${cat}Failed`,        document.getElementById(`${cat}FailedList`).value);
+                localStorage.setItem(`${cat}Failed`,        JSON.stringify(failedData[cat] || []));
                 localStorage.setItem(`${cat}Finished`,      document.getElementById(`${cat}FinishedList`).value);
             });
         }
@@ -1077,12 +1211,73 @@
         
         // Move URL to failed list
         function moveToFailed(url, error, category, fetch_mode) {
-            const failedListEl = document.getElementById(`${category}FailedList`);
-            const currentFailed = failedListEl.value.trim();
-            const tag = fetch_mode === 'audio' ? '[A]' : '[T]';
-            const entry = `${tag} ${url} - Error: ${error}`;
-            failedListEl.value = currentFailed ? `${currentFailed}\n${entry}` : entry;
+            const uid = Math.random().toString(36).slice(2, 9);
+            failedData[category].push({ uid, url, error, fetch_mode });
             saveQueuesToStorage();
+            renderFailedCards(category);
+        }
+
+        function extractVideoId(url) {
+            const m = url.match(/[?&]v=([^&]+)/);
+            return m ? m[1] : null;
+        }
+
+        function renderFailedCards(category) {
+            const container = document.getElementById(`${category}FailedList`);
+            const items = failedData[category] || [];
+            if (items.length === 0) {
+                container.innerHTML = '<div class="failed-empty">No failed items</div>';
+                return;
+            }
+            container.innerHTML = items.map(item => {
+                const { uid, url, error, fetch_mode } = item;
+                const videoId = extractVideoId(url);
+                const badgeClass = fetch_mode === 'audio' ? 'badge-audio' : 'badge-transcript';
+                const badgeText = fetch_mode === 'audio' ? '[A]' : '[T]';
+                const mediaHtml = videoId
+                    ? `<img class="failed-thumbnail" src="https://img.youtube.com/vi/${videoId}/hqdefault.jpg" alt="thumbnail" onerror="this.style.display='none'">`
+                    : `<div class="failed-thumbnail-placeholder">📰</div>`;
+                const safeError = error.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `
+                <div class="failed-card">
+                    ${mediaHtml}
+                    <div class="failed-card-body">
+                        <div class="failed-card-header">
+                            <span class="failed-badge ${badgeClass}">${badgeText}</span>
+                            <span class="failed-url" title="${url}">${url}</span>
+                        </div>
+                        <div class="failed-error">${safeError}</div>
+                        <div class="failed-card-actions">
+                            <button class="failed-retry-btn" onclick="retryOne('${uid}','${category}')">↺ Retry</button>
+                            <button class="failed-dismiss-btn" onclick="dismissOne('${uid}','${category}')">✕ Dismiss</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function retryOne(uid, category) {
+            const idx = failedData[category].findIndex(i => i.uid === uid);
+            if (idx === -1) return;
+            const { url, fetch_mode } = failedData[category][idx];
+            failedData[category].splice(idx, 1);
+            const queueEl = fetch_mode === 'audio'
+                ? document.getElementById(`${category}AudioQueueList`)
+                : document.getElementById(`${category}QueueList`);
+            const existing = queueEl.value.trim();
+            queueEl.value = existing ? `${existing}\n${url}` : url;
+            saveQueuesToStorage();
+            renderFailedCards(category);
+            syncWakeLock();
+            if (!isProcessing) processNextLink();
+        }
+
+        function dismissOne(uid, category) {
+            const idx = failedData[category].findIndex(i => i.uid === uid);
+            if (idx === -1) return;
+            failedData[category].splice(idx, 1);
+            saveQueuesToStorage();
+            renderFailedCards(category);
         }
         
         function handleFileSelect(event) {
@@ -1622,17 +1817,9 @@
                 const reQueued = [];
 
                 for (const category of categories) {
-                    const failedEl = document.getElementById(`${category}FailedList`);
-                    const lines = failedEl.value.split('\n').filter(l => l.trim());
-
-                    for (const line of lines) {
-                        // Format: [A] https://url - Error: message  OR  [T] https://url - Error: message
-                        const match = line.match(/^\[(A|T)\]\s+(https?:\/\/\S+)\s*-\s*Error:/);
-                        if (!match) continue;
-
-                        const tag = match[1];       // 'A' or 'T'
-                        const url = match[2];       // bare URL (stops at first whitespace)
-                        const fetch_mode = tag === 'A' ? 'audio' : 'transcript';
+                    for (const item of (failedData[category] || [])) {
+                        const { url, fetch_mode } = item;
+                        const tag = fetch_mode === 'audio' ? 'A' : 'T';
 
                         // Dedup within this retry action: same url+category+fetch_mode once only
                         const key = `${url}|${category}|${fetch_mode}`;
@@ -1640,7 +1827,7 @@
                         seen.add(key);
 
                         // Push into the correct queue textarea
-                        const queueEl = tag === 'A'
+                        const queueEl = fetch_mode === 'audio'
                             ? document.getElementById(`${category}AudioQueueList`)
                             : document.getElementById(`${category}QueueList`);
 

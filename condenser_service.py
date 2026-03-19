@@ -90,13 +90,9 @@ def condense_content(
             {map_prompt.replace('{chunk_text}', chunk)}
         """
 
-        chunk_response_text = ""
         try:
-            for streamed_chunk in current_model.stream(map_input):
-                if hasattr(streamed_chunk, 'content'):
-                    chunk_response_text += streamed_chunk.content
-                else:
-                    chunk_response_text += str(streamed_chunk)
+            response = current_model.invoke(map_input)
+            chunk_response_text = response.content
         except Exception as e:
             print(f"[ERROR] Model crashed during MAP chunk {idx + 1}/{len(chunks)}: {e}")
             if _has_checkpoint:
@@ -106,7 +102,7 @@ def condense_content(
                 _save()
             raise ValueError(f"Model crashed during MAP chunk {idx + 1}/{len(chunks)}: {e}")
 
-        print(f"[DEBUG] MAP chunk {idx + 1} streaming complete: {len(chunk_response_text)} chars")
+        print(f"[DEBUG] MAP chunk {idx + 1} complete: {len(chunk_response_text)} chars")
         cleaned, success = remove_thinking_tokens(chunk_response_text)
 
         if not success:
@@ -159,14 +155,10 @@ def condense_content(
                     {reduce_prompt.replace('{combined_map_results}', combined_chunks)}
                 """
 
-            print(f"[DEBUG] Streaming REDUCE phase...")
-            reduce_response_text = ""
+            print(f"[DEBUG] Running REDUCE phase...")
             try:
-                for streamed_chunk in current_model.stream(reduce_input):
-                    if hasattr(streamed_chunk, 'content'):
-                        reduce_response_text += streamed_chunk.content
-                    else:
-                        reduce_response_text += str(streamed_chunk)
+                response = current_model.invoke(reduce_input)
+                reduce_response_text = response.content
             except Exception as e:
                 print(f"[ERROR] Model crashed during single-batch REDUCE: {e}")
                 if _has_checkpoint:
@@ -176,7 +168,7 @@ def condense_content(
                     _save()
                 raise ValueError(f"Model crashed during single-batch REDUCE: {e}")
 
-            print(f"[DEBUG] REDUCE streaming complete: {len(reduce_response_text)} chars")
+            print(f"[DEBUG] REDUCE complete: {len(reduce_response_text)} chars")
             cleaned_reduce, success = remove_thinking_tokens(reduce_response_text)
             if not success:
                 error_msg = "Failed to remove thinking tokens from single-batch REDUCE phase"
@@ -267,14 +259,10 @@ def condense_content(
                     {prompt_to_use}
                 """
 
-            print(f"[DEBUG] Streaming REDUCE batch {batch_idx + 1}...")
-            batch_response_text = ""
+            print(f"[DEBUG] Running REDUCE batch {batch_idx + 1}...")
             try:
-                for streamed_chunk in current_model.stream(reduce_input):
-                    if hasattr(streamed_chunk, 'content'):
-                        batch_response_text += streamed_chunk.content
-                    else:
-                        batch_response_text += str(streamed_chunk)
+                response = current_model.invoke(reduce_input)
+                batch_response_text = response.content
             except Exception as e:
                 print(f"[ERROR] Model crashed during REDUCE batch {batch_idx + 1}/{num_batches}: {e}")
                 if _has_checkpoint:
@@ -284,7 +272,7 @@ def condense_content(
                     _save()
                 raise ValueError(f"Model crashed during REDUCE batch {batch_idx + 1}/{num_batches}: {e}")
 
-            print(f"[DEBUG] REDUCE batch {batch_idx + 1} streaming complete: {len(batch_response_text)} chars")
+            print(f"[DEBUG] REDUCE batch {batch_idx + 1} complete: {len(batch_response_text)} chars")
             cleaned_batch, success = remove_thinking_tokens(batch_response_text)
             if not success:
                 error_msg = f"Failed to remove thinking tokens from REDUCE batch {batch_idx + 1}/{num_batches}"
@@ -333,14 +321,10 @@ def condense_content(
                     {reduce_prompt.replace('{combined_map_results}', final_output)}
                 """
 
-                print(f"[DEBUG] Streaming final consolidation...")
-                consolidation_text = ""
+                print(f"[DEBUG] Running final consolidation...")
                 try:
-                    for streamed_chunk in current_model.stream(consolidation_input):
-                        if hasattr(streamed_chunk, 'content'):
-                            consolidation_text += streamed_chunk.content
-                        else:
-                            consolidation_text += str(streamed_chunk)
+                    response = current_model.invoke(consolidation_input)
+                    consolidation_text = response.content
                 except Exception as e:
                     print(f"[ERROR] Model crashed during final consolidation: {e}")
                     if _has_checkpoint:

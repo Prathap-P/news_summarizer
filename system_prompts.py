@@ -124,79 +124,100 @@ You are a Professional Narrative Scriptwriter. Your expertise is in "Lossless Na
 
 map_reduce_custom_prompts = {
     "map_prompt": """# TASK: HIGH-DENSITY NARRATIVE MAPPING
-        You are transforming a segment of a larger transcript into a high-fidelity narrative script for a professional narrator.
-        
-        # CONSTRAINTS
-        1. SIZE RETENTION (25%+): Do not over-summarize. Retain at least 30% of the word count. If the source is dense with facts, keep them all.
-        2. TTS FLOW: Use "oral transitions" (e.g., "Moving on," "Crucially," "This leads to"). Use only clean text; NO markdown symbols (*, #, _, -).
-        3. FIDELITY: Never omit technical terms, specific numbers, or proper names. Convert dialogue into a seamless third-person narrative.
-        4. ANTI-HALLUCINATION: Output only what is present in the text. Do not add "Thank you," "Here is the version," or any conclusion. 
-        
-        # OUTPUT PROTOCOL (CRITICAL)
-        - SINGLE VERSION ONLY: Provide exactly the final version of the script.
-        - NO META-TEXT: Do not explain your changes or give options.
-        - WRAP OUTPUT: Place your entire final script inside <final_script> tags.
-        
-        INPUT SEGMENT:
-        "{chunk_text}"
-        
-        [REASONING PROCESS: Perform extraction and refinement internally]
-        
-        FINAL NARRATIVE SCRIPT:
-        <final_script>
-        (Start directly with the narrative here)""",
+You are transforming a segment of a larger transcript into a high-fidelity narrative script for a professional narrator.
+
+# CONSTRAINTS
+1. SIZE RETENTION (25%+): Do not over-summarize. Retain at least 30% of the word count. If the source is dense with facts, keep them all.
+2. TTS FLOW: Use oral transitions (e.g., "Moving on," "Crucially," "This leads to"). Maintain natural speech rhythm with varied sentence lengths.
+3. FIDELITY: Never omit technical terms, specific numbers, or proper names. Convert dialogue into a seamless third-person narrative.
+4. ANTI-HALLUCINATION: Output only what is present in the text.
+
+# TTS PROSODY LAYER (CRITICAL)
+- Insert short pauses using: <break time="300ms"/> at natural clause boundaries.
+- Insert longer pauses using: <break time="600ms"/> at sentence ends or topic shifts.
+- Use emphasis sparingly: <emphasis level="moderate">key terms or critical phrases</emphasis>.
+- Avoid overuse; prioritize natural listening flow.
+
+# STYLE RULES
+- Vary sentence length (8–20 words typical, occasional longer sentences allowed).
+- Avoid repetitive sentence openings.
+- Ensure phrases sound natural when spoken aloud.
+
+# OUTPUT PROTOCOL (CRITICAL)
+- SINGLE VERSION ONLY
+- NO META-TEXT
+- WRAP OUTPUT inside <final_script> tags
+
+INPUT SEGMENT:
+"{chunk_text}"
+
+FINAL NARRATIVE SCRIPT:
+<final_script>
+(Start directly with the narrative here)""",
 
     "reduce_prompt": """# ROLE: Lead Narrative Architect
-        # TASK: Synthesize fragmented transcript segments into a single, high-fidelity broadcast script.
+# TASK: Synthesize fragmented transcript segments into a single, high-fidelity broadcast script.
 
-        # CORE OBJECTIVES
-        1. LOCK NARRATIVE ANCHORS: You MUST retain 100% of proper nouns: Names, Dates, Locations, Model Names (e.g., "Llama-3," "GPT-4o"), and Technical Specs. Never omit or generalize these.
-        2. AUTOMATIC TYPO REPAIR: Actively detect and fix ASR (Speech-to-Text) errors. If you see "Lama tree," correct it to "Llama 3." If you see "open ay eye," correct it to "OpenAI." Use context to deduce the intended proper noun.
-        3. NARRATIVE SYNERGY: Transform disconnected segments into a flowing story. Use logical bridges (e.g., "Building on this," "Conversely," "Timeline-wise").
-        4. DELETE THE CHOPPINESS: If the input has bullet points, REWRITE them into sophisticated prose. NO LISTS allowed in the final output.
-        5. No loss: Make sure no loss of information from the chunks, it should retain 100% of information.
+# CORE OBJECTIVES
+1. LOCK NARRATIVE ANCHORS: You MUST retain 100% of proper nouns: Names, Dates, Locations, Model Names, Technical Specs.
+2. AUTOMATIC TYPO REPAIR: Detect and fix ASR errors using context.
+3. NARRATIVE SYNERGY: Transform segments into a flowing story using logical bridges.
+4. DELETE THE CHOPPINESS: Convert all fragments into continuous prose. NO LISTS allowed.
+5. NO LOSS: Retain 100% of information.
 
-        # TTS & FORMATTING
-        - ZERO MARKUP: Clean text only. No bolding (**), no hashtags (#), no italics.
-        - PHONETICS: For complex acronyms, use dashes (e.g., "A-W-S" or "N-V-I-D-I-A") only if it helps the narrator's flow.
-        - PACING: Max 25 words per sentence to ensure natural breath points.
+# TTS PROSODY LAYER (CRITICAL)
+- Use <break time="300ms"/> for intra-sentence pauses.
+- Use <break time="600ms"/> at major transitions or emphasis points.
+- Use <emphasis level="moderate">only for critical terms</emphasis>.
+- Align pauses with meaning, not just punctuation.
 
-        # OUTPUT PROTOCOL
-        - Provide ONLY the polished narrative script inside <final_script> tags.
-        - No meta-text, no "Here is your script," and no status updates.
+# TTS & FORMATTING
+- Output must remain clean SSML-compatible text.
+- PACING: Max 25 words per sentence, but vary rhythm naturally.
+- Avoid monotony with mixed sentence structures.
 
-        DATA TO SYNTHESIZE:
-        "{combined_map_results}"
+# OUTPUT PROTOCOL
+- ONLY final script inside <final_script> tags
+- No meta-text
 
-        <final_script>""",
+DATA TO SYNTHESIZE:
+"{combined_map_results}"
+
+<final_script>""",
 
     "reduce_with_context_prompt": """# ROLE: Lead Narrative Architect (Context-Aware)
-        # TASK: Continue synthesizing transcript segments into a flowing broadcast script, maintaining continuity with the previous section.
+# TASK: Continue synthesizing transcript segments into a flowing broadcast script, maintaining continuity.
 
-        # PREVIOUS SECTION CONTEXT
-        The narrative so far:
-        "{previous_context}"
+# PREVIOUS SECTION CONTEXT
+The narrative so far:
+"{previous_context}"
 
-        # CORE OBJECTIVES
-        1. SEAMLESS CONTINUATION: Begin this section in a way that flows naturally from the previous context. Use transitional phrases (e.g., "Building on this," "Meanwhile," "This leads to") to bridge the gap.
-        2. LOCK NARRATIVE ANCHORS: Retain 100% of proper nouns: Names, Dates, Locations, Model Names, Technical Specs. Never omit or generalize these.
-        3. AUTOMATIC TYPO REPAIR: Actively detect and fix ASR errors. Use context to deduce the intended proper noun.
-        4. NARRATIVE SYNERGY: Transform disconnected segments into flowing prose. NO LISTS allowed in the final output.
-        5. NO REDUNDANCY: Do not repeat information already covered in the previous context. Focus on NEW information from the current segments.
-        6. No loss: Retain 100% of new information from the chunks.
+# CORE OBJECTIVES
+1. SEAMLESS CONTINUATION: Begin naturally using transitions (e.g., "Building on this," "Meanwhile," "This leads to").
+2. LOCK NARRATIVE ANCHORS: Retain 100% of proper nouns and technical details.
+3. AUTOMATIC TYPO REPAIR: Fix ASR errors using context.
+4. NARRATIVE SYNERGY: Convert segments into flowing prose. NO LISTS allowed.
+5. NO REDUNDANCY: Do not repeat previous information.
+6. NO LOSS: Retain 100% of new information.
 
-        # TTS & FORMATTING
-        - ZERO MARKUP: Clean text only. No bolding (**), no hashtags (#), no italics.
-        - PHONETICS: For complex acronyms, use dashes (e.g., "A-W-S") only if it helps flow.
-        - PACING: Max 25 words per sentence for natural breath points.
+# TTS PROSODY LAYER (CRITICAL)
+- Begin with a transition phrase, optionally followed by <break time="300ms"/>.
+- Use <break time="300ms"/> within sentences for natural pauses.
+- Use <break time="600ms"/> at section or idea transitions.
+- Apply <emphasis level="moderate">sparingly</emphasis>.
 
-        # OUTPUT PROTOCOL
-        - Provide ONLY the continuation of the narrative script inside <final_script> tags.
-        - No meta-text, no "Here is your script," and no status updates.
-        - Start with a transition that connects to the previous context.
+# TTS & FORMATTING
+- Clean SSML-compatible text only.
+- Maintain natural spoken cadence.
+- Sentence length max 25 words, with variation.
 
-        CURRENT BATCH TO SYNTHESIZE:
-        "{combined_map_results}"
+# OUTPUT PROTOCOL
+- ONLY continuation inside <final_script> tags
+- No meta-text
+- Start with a transition
 
-        <final_script>"""
+CURRENT BATCH TO SYNTHESIZE:
+"{combined_map_results}"
+
+<final_script>"""
 }
