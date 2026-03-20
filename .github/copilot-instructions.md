@@ -77,13 +77,14 @@ Format string used: `"140/251/139/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaud
 ### Condensation Pipeline (`condenser_service.py` + `condensation_cache.py`)
 - Map phase: splits content with `RecursiveCharacterTextSplitter`, summarises each chunk individually.
 - Reduce phase: batches `REDUCE_BATCH_SIZE = 3` chunks; consolidates if total > `FINAL_CONSOLIDATION_THRESHOLD = 15000` chars.
-- Always stream: `for chunk in model.stream(input)` → accumulate → `remove_thinking_tokens()`.
+- Uses `model.invoke(input)` (not streaming) → `response.content` → `remove_thinking_tokens()`.
 - **Full checkpoint resume**: every MAP chunk and REDUCE batch is saved atomically after success. A crash loses at most one step. Chunks are stored before any LLM calls so resume uses identical splits.
 - Cache key: `SHA-256(canonical_url | model_key | fetch_mode)[:16]`. YouTube variants all collapse to `yt:<video_id>`. News URLs strip tracking params.
 - `fetch_mode` is part of the cache key — a Whisper-forced audio run never reuses a cached transcript-API run for the same video.
 - TTL: 24 hours. Expired checkpoints purged at startup via `purge_expired_checkpoints()`.
 - `condensation_cache/` and `yt_audio/` are gitignored.
-- **Crash-safe streaming**: all 4 `current_model.stream()` loops (MAP, single-batch REDUCE, multi-batch REDUCE, final consolidation) are wrapped in `try/except Exception`. On crash: logs the error, increments the correct checkpoint retry counter (`map_retry_counts[str_idx]`, `reduce_retry_counts[key]`, or `consolidation_retries`), calls `_save()`, then raises `ValueError`. This converts silent model crashes (e.g. LM Studio `Exit code: null`) into recoverable checkpointed errors that `app.py`'s `except ValueError` block returns as 422 with `resume_progress`.
+- **Crash-safe invoke**: all 4 `current_model.invoke()` calls (MAP, single-batch REDUCE, multi-batch REDUCE, final consolidation) are wrapped in `try/except Exception`. On crash: logs the error, increments the correct checkpoint retry counter (`map_retry_counts[str_idx]`, `reduce_retry_counts[key]`, or `consolidation_retries`), calls `_save()`, then raises `ValueError`. This converts silent model crashes (e.g. LM Studio `Exit code: null`) into recoverable checkpointed errors that `app.py`'s `except ValueError` block returns as 422 with `resume_progress`.
+- `streaming=True` / `stream_usage=True` flags are commented out on all local LLM model definitions in `llm_models.py` — do not re-enable them for the condenser models.
 
 ### URL Normalisation (YouTube)
 In `app.py`'s `load_content` route, before any checkpoint or I/O work:
@@ -103,14 +104,14 @@ Queue state is persisted to `localStorage`. Key behaviours:
 - A URL is removed from the queue and `saveQueuesToStorage()` is called **immediately at dequeue time** (not after processing) so a page reload cannot replay already-handed-off URLs.
 - Finished list entries show `[T]` or `[A]` prefix, plus `[CACHED:VIDEO_ID]` when a full cache hit was served.
 - `/load_content` response includes `from_cache` (bool) and `video_id` (string | null).
-- Failed list entries are written as `[T] <url> - Error: <message>` or `[A] <url> - Error: <message>`.
+- **Failed list is a card UI** — not a textarea. Each failed item is stored as `{ uid, url, error, fetch_mode, title }` in `failedData[category]` (a module-level JS object), persisted to `localStorage` as a JSON array under `${cat}Failed`. Cards show a YouTube thumbnail (`img.youtube.com/vi/{ID}/hqdefault.jpg`), video title (fetched once via oEmbed, cached in the item), error text, and per-card **↺ Retry** / **✕ Dismiss** buttons. News URLs show a 📰 placeholder instead. Do not read `.value` from a `${cat}FailedList` element — it is a `<div>`, not a textarea.
 
 ### Retry All Failed Button (`retryAllFailed()` in `templates/index.html`)
 A single fixed button (bottom-right) handles both retry paths:
-1. **Re-queue failed URLs**: scans all three `${cat}FailedList` textareas, parses `[T]`/`[A]` prefixes via regex `/^\[(A|T)\]\s+(https?:\/\/\S+)\s*-\s*Error:/`, pushes each URL back into the correct queue textarea (`QueueList` for `[T]`, `AudioQueueList` for `[A]`). Deduplicates within a single retry action using a `Set` keyed by `url|category|fetch_mode`. Calls `saveQueuesToStorage()` **before** the network call.
+1. **Re-queue failed URLs**: iterates `failedData[category]` directly (no textarea parsing), pushes each URL back into the correct queue textarea (`QueueList` for transcript, `AudioQueueList` for audio). Deduplicates within a single retry action using a `Set` keyed by `url|category|fetch_mode`. Calls `saveQueuesToStorage()` **before** the network call.
 2. **Retry Telegram backups**: calls `POST /retry_failed_telegrams` (unchanged backend) to re-send `backup_content/` files.
 3. Toast shows unified result: `"X URL(s) re-queued | Telegrams — ✅ Sent: N, ❌ Failed: N"`. Shows `"Nothing to retry"` when both paths find nothing.
-- Failed list entries are **not** cleared by the retry — normal success/fail flow adds new FinishedList/FailedList entries on re-processing.
+- Failed cards are **not** cleared by the retry — use the per-card ↺ Retry or ✕ Dismiss buttons to remove individual items.
 
 ### Whisper Memory Management
 `transcribe_audio()` always releases GPU memory in a `finally` block:

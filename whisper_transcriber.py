@@ -5,16 +5,16 @@ Flow:
         ├─ get_video_duration()   — metadata-only fetch, warn if > 90 min
         ├─ download_audio()       — yt-dlp → yt_audio/<id>.mp3
         │       └─ REUSES cached file if it already exists and is non-empty
-        └─ transcribe_audio()     — mlx-whisper large-v3
-                └─ GPU memory released in finally block (Apple Silicon only)
+        └─ transcribe_audio()     — mlx-whisper large-v3 in isolated subprocess
+                └─ All MLX/Metal unified memory reclaimed when subprocess exits
 """
 
 import gc
+import multiprocessing as mp
 import platform
 from datetime import datetime
 from pathlib import Path
 
-import mlx_whisper
 import yt_dlp
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ def _ts() -> str:
 
 
 def _release_gpu_memory() -> None:
-    """Release MLX/Metal GPU memory after Whisper use.
+    """Release MLX/Metal GPU memory in the current process.
 
     No-op on non-Apple-Silicon platforms so the code runs unmodified on Linux/CUDA.
     """
@@ -76,6 +76,26 @@ def _release_gpu_memory() -> None:
         except Exception as e:
             print(f"[WARNING] Could not clear MPS cache: {e}")
     print(f"[INFO]    [{_ts()}] Whisper GPU memory released")
+
+
+def _transcribe_worker(
+    audio_path_str: str,
+    model: str,
+    result_queue: mp.Queue,  # type: ignore[type-arg]
+) -> None:
+    """Worker that runs Whisper inside an isolated subprocess.
+
+    All MLX/Metal unified-memory allocations (~3–10 GB) are reclaimed
+    unconditionally when this process exits — no GC or cache-clear needed.
+    """
+    try:
+        import mlx_whisper  # imported inside subprocess so the parent never loads it
+
+        result = mlx_whisper.transcribe(audio_path_str, path_or_hf_repo=model)
+        text = result.get("text", "").strip()
+        result_queue.put(("ok", text))
+    except Exception as e:
+        result_queue.put(("error", str(e)))
 
 
 # ---------------------------------------------------------------------------
@@ -159,8 +179,12 @@ def download_audio(url: str, video_id: str) -> Path | None:
 def transcribe_audio(audio_path: Path) -> str | None:
     """Transcribe an audio file with mlx-whisper (large-v3 by default).
 
-    GPU memory is always released in the ``finally`` block so the ~3 GB of MLX
-    weights are not held for the lifetime of the Flask process.
+    Runs Whisper inside a ``spawn``-ed subprocess so all MLX/Metal unified
+    memory (~3–10 GB) is unconditionally reclaimed by the OS when the child
+    process exits.  This is the only reliable way to free unified memory;
+    ``gc.collect()`` + ``mx.metal.clear_cache()`` only clear the allocator's
+    free-list and cannot release weights that are still referenced inside
+    mlx_whisper's internal model cache.
 
     Returns plain transcript text, or None on failure or empty result.
     """
@@ -168,18 +192,47 @@ def transcribe_audio(audio_path: Path) -> str | None:
         f"[INFO]    [{_ts()}] Starting Whisper transcription: "
         f"{audio_path.name}  (model: {WHISPER_MODEL})"
     )
+
+    ctx = mp.get_context("spawn")
+    result_queue: mp.Queue = ctx.Queue()  # type: ignore[type-arg]
+    proc = ctx.Process(
+        target=_transcribe_worker,
+        args=(str(audio_path), WHISPER_MODEL, result_queue),
+    )
+
     try:
-        result = mlx_whisper.transcribe(str(audio_path), path_or_hf_repo=WHISPER_MODEL)
-        text = result.get("text", "").strip()
+        proc.start()
+        proc.join()  # block until transcription finishes (no timeout — can be 5-15 min)
+
+        if result_queue.empty():
+            print(
+                f"[ERROR]   Whisper subprocess exited without a result "
+                f"(exit code: {proc.exitcode})"
+            )
+            return None
+
+        status, value = result_queue.get_nowait()
+        if status == "error":
+            print(f"[ERROR]   Whisper transcription failed: {value}")
+            return None
+
+        text: str = value
         if not text:
             print("[WARNING] Whisper returned an empty transcript.")
             return None
+
         print(f"[INFO]    [{_ts()}] Whisper transcription complete: {len(text):,} chars")
+        print(f"[INFO]    [{_ts()}] Whisper subprocess exited — unified memory reclaimed")
         return text
+
     except Exception as e:
         print(f"[ERROR]   Whisper transcription failed: {e}")
         return None
     finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=5)
+        # Belt-and-suspenders: release anything the parent process may have touched
         _release_gpu_memory()
 
 

@@ -132,14 +132,16 @@ You are transforming a segment of a larger transcript into a high-fidelity narra
 3. FIDELITY: Never omit technical terms, specific numbers, or proper names. Convert dialogue into a seamless third-person narrative.
 4. ANTI-HALLUCINATION: Output only what is present in the text.
 
-# TTS PROSODY LAYER (CRITICAL)
-- Insert short pauses using: <break time="300ms"/> at natural clause boundaries.
-- Insert longer pauses using: <break time="600ms"/> at sentence ends or topic shifts.
-- Use emphasis sparingly: <emphasis level="moderate">key terms or critical phrases</emphasis>.
-- Avoid overuse; prioritize natural listening flow.
+# TTS PROSODY LAYER (KOKORO-SAFE)
+- Use commas for short natural pauses within sentences.
+- Use ellipses (...) for longer pauses or transitions.
+- Use em dashes (—) to emphasize important phrases.
+- Avoid any XML, SSML, or special tags.
+- Ensure the text sounds natural when spoken aloud.
 
 # STYLE RULES
 - Vary sentence length (8–20 words typical, occasional longer sentences allowed).
+- Occasionally combine related ideas into slightly longer sentences to improve flow.
 - Avoid repetitive sentence openings.
 - Ensure phrases sound natural when spoken aloud.
 
@@ -165,16 +167,18 @@ FINAL NARRATIVE SCRIPT:
 4. DELETE THE CHOPPINESS: Convert all fragments into continuous prose. NO LISTS allowed.
 5. NO LOSS: Retain 100% of information.
 
-# TTS PROSODY LAYER (CRITICAL)
-- Use <break time="300ms"/> for intra-sentence pauses.
-- Use <break time="600ms"/> at major transitions or emphasis points.
-- Use <emphasis level="moderate">only for critical terms</emphasis>.
+# TTS PROSODY LAYER (KOKORO-SAFE)
+- Use commas for natural short pauses.
+- Use ellipses (...) for longer pauses or transitions.
+- Use em dashes (—) to emphasize key ideas.
+- Avoid special markup or tags.
 - Align pauses with meaning, not just punctuation.
 
 # TTS & FORMATTING
-- Output must remain clean SSML-compatible text.
+- Clean plain text only.
 - PACING: Max 25 words per sentence, but vary rhythm naturally.
-- Avoid monotony with mixed sentence structures.
+- Occasionally allow slightly longer sentences to avoid monotone delivery.
+- Avoid repetitive sentence structures.
 
 # OUTPUT PROTOCOL
 - ONLY final script inside <final_script> tags
@@ -200,16 +204,18 @@ The narrative so far:
 5. NO REDUNDANCY: Do not repeat previous information.
 6. NO LOSS: Retain 100% of new information.
 
-# TTS PROSODY LAYER (CRITICAL)
-- Begin with a transition phrase, optionally followed by <break time="300ms"/>.
-- Use <break time="300ms"/> within sentences for natural pauses.
-- Use <break time="600ms"/> at section or idea transitions.
-- Apply <emphasis level="moderate">sparingly</emphasis>.
+# TTS PROSODY LAYER (KOKORO-SAFE)
+- Begin with a natural transition phrase.
+- Use commas for short pauses within sentences.
+- Use ellipses (...) for longer transitions or reflective pauses.
+- Use em dashes (—) for emphasis where needed.
+- Avoid any markup or tags.
 
 # TTS & FORMATTING
-- Clean SSML-compatible text only.
+- Clean plain text only.
 - Maintain natural spoken cadence.
 - Sentence length max 25 words, with variation.
+- Occasionally combine sentences to improve flow.
 
 # OUTPUT PROTOCOL
 - ONLY continuation inside <final_script> tags
