@@ -12,6 +12,7 @@ Flow:
 import gc
 import multiprocessing as mp
 import platform
+import queue as _stdlib_queue
 from datetime import datetime
 from pathlib import Path
 
@@ -87,14 +88,32 @@ def _transcribe_worker(
 
     All MLX/Metal unified-memory allocations (~3–10 GB) are reclaimed
     unconditionally when this process exits — no GC or cache-clear needed.
+
+    IMPORTANT: do NOT call result_queue.cancel_join_thread() here.
+    Without it, the process waits at exit for the feeder thread to fully flush
+    all pickled data to the OS pipe.  The parent drains the queue (get())
+    before calling proc.join(), so this never causes a deadlock, and it
+    guarantees the full transcript reaches the parent even for large videos.
     """
+    import os
+
+    pid = os.getpid()
+    ts = lambda: datetime.now().strftime("%H:%M:%S")  # noqa: E731
     try:
+        print(f"[INFO]    [{ts()}] [worker:{pid}] Loading mlx_whisper model: {model}")
         import mlx_whisper  # imported inside subprocess so the parent never loads it
 
+        print(f"[INFO]    [{ts()}] [worker:{pid}] Model loaded — starting transcription of {audio_path_str}")
         result = mlx_whisper.transcribe(audio_path_str, path_or_hf_repo=model)
         text = result.get("text", "").strip()
+        char_count = len(text)
+        print(f"[INFO]    [{ts()}] [worker:{pid}] Transcription done: {char_count:,} chars — flushing result to parent")
         result_queue.put(("ok", text))
+        # Process now exits normally; Python joins the feeder thread to ensure
+        # all pickled bytes are written to the pipe before the process ends.
+        print(f"[INFO]    [{ts()}] [worker:{pid}] Result flushed — subprocess exiting")
     except Exception as e:
+        print(f"[ERROR]   [worker:{pid}] Whisper worker exception: {e}")
         result_queue.put(("error", str(e)))
 
 
@@ -202,31 +221,76 @@ def transcribe_audio(audio_path: Path) -> str | None:
 
     try:
         proc.start()
-        proc.join()  # block until transcription finishes (no timeout — can be 5-15 min)
+        print(f"[INFO]    [{_ts()}] Whisper subprocess started (PID {proc.pid})")
+        print(f"[INFO]    [{_ts()}] Waiting for Whisper result (may take several minutes for long videos)...")
 
-        if result_queue.empty():
+        # Poll the queue every 5 s so we detect subprocess crashes quickly
+        # instead of waiting for the full 2-hour timeout.
+        #
+        # Why poll instead of a single blocking get():
+        #   If the subprocess is killed by the OS (e.g. OOM), no result is
+        #   ever put into the queue.  A single get(timeout=7200) would block
+        #   for 2 hours before giving up.  Polling with is_alive() detects
+        #   the death within 5 s.
+        _POLL_INTERVAL = 5   # seconds between liveness checks
+        _MAX_WAIT = 7200     # 2 h hard ceiling (large-v3 on 90-min video ≈ 15 min)
+        _waited = 0
+        status: str | None = None
+        value: str | None = None
+
+        while _waited < _MAX_WAIT:
+            try:
+                status, value = result_queue.get(timeout=_POLL_INTERVAL)
+                break  # received result — exit poll loop
+            except _stdlib_queue.Empty:
+                _waited += _POLL_INTERVAL
+                if not proc.is_alive():
+                    print(
+                        f"[ERROR]   Whisper subprocess (PID {proc.pid}) died unexpectedly "
+                        f"(exit code: {proc.exitcode}) — no result received"
+                    )
+                    return None
+                if _waited % 60 == 0:
+                    print(
+                        f"[INFO]    [{_ts()}] Still waiting for Whisper... "
+                        f"({_waited // 60} min elapsed)"
+                    )
+        else:
+            print(f"[ERROR]   Whisper timed out after {_MAX_WAIT // 60} min — killing subprocess")
+            return None
+
+        print(f"[DEBUG]   Whisper subprocess result received — status={status}")
+
+        # Safe to join now: the worker has already called put() and its feeder
+        # thread has flushed all bytes to the pipe (that's what we just read).
+        proc.join(timeout=30)
+        if proc.is_alive():
             print(
-                f"[ERROR]   Whisper subprocess exited without a result "
-                f"(exit code: {proc.exitcode})"
+                f"[WARNING] Whisper subprocess (PID {proc.pid}) did not exit within "
+                f"30 s after result — terminating"
             )
-            return None
+            proc.terminate()
+            proc.join(timeout=5)
+        else:
+            print(
+                f"[INFO]    [{_ts()}] Whisper subprocess exited "
+                f"(code {proc.exitcode}) — unified memory reclaimed"
+            )
 
-        status, value = result_queue.get_nowait()
         if status == "error":
-            print(f"[ERROR]   Whisper transcription failed: {value}")
+            print(f"[ERROR]   Whisper transcription failed inside subprocess: {value}")
             return None
 
-        text: str = value
+        text: str = value  # type: ignore[assignment]
         if not text:
             print("[WARNING] Whisper returned an empty transcript.")
             return None
 
         print(f"[INFO]    [{_ts()}] Whisper transcription complete: {len(text):,} chars")
-        print(f"[INFO]    [{_ts()}] Whisper subprocess exited — unified memory reclaimed")
         return text
 
     except Exception as e:
-        print(f"[ERROR]   Whisper transcription failed: {e}")
+        print(f"[ERROR]   Unexpected error in transcribe_audio: {e}")
         return None
     finally:
         if proc.is_alive():

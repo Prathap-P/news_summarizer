@@ -627,9 +627,274 @@
             margin-bottom: 4px;
             font-style: italic;
         }
+
+        /* ---- Left Column (Library + Queue Panels) ---- */
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: stretch;
+        }
+
+        /* ---- Library Queue Panel ---- */
+        .library-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 15px;
+        }
+
+        .library-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+            flex-wrap: wrap;
+        }
+
+        .library-panel-header h3 {
+            color: #667eea;
+            font-size: 15px;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .library-add-row {
+            display: flex;
+            gap: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .library-add-row input[type="text"] {
+            flex: 1;
+            padding: 7px 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 12px;
+            transition: border-color 0.3s;
+        }
+
+        .library-add-row input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .library-add-btn {
+            padding: 7px 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        }
+
+        .library-add-btn:hover {
+            opacity: 0.88;
+        }
+
+        .library-cards-row {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 6px;
+            min-height: 60px;
+            scrollbar-width: thin;
+            scrollbar-color: #d0d0d0 transparent;
+        }
+
+        .library-cards-row::-webkit-scrollbar {
+            height: 5px;
+        }
+
+        .library-cards-row::-webkit-scrollbar-thumb {
+            background: #d0d0d0;
+            border-radius: 3px;
+        }
+
+        .library-empty {
+            font-size: 12px;
+            color: #bbb;
+            padding: 16px 0;
+            text-align: center;
+            width: 100%;
+            align-self: center;
+        }
+
+        .library-card {
+            flex-shrink: 0;
+            width: 164px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fff;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            transition: box-shadow 0.2s;
+        }
+
+        .library-card:hover {
+            box-shadow: 0 3px 10px rgba(0,0,0,0.13);
+        }
+
+        .library-thumbnail {
+            width: 100%;
+            height: 92px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .library-thumbnail-placeholder {
+            width: 100%;
+            height: 60px;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #aaa;
+        }
+
+        .library-card-body {
+            padding: 7px 8px 8px;
+        }
+
+        .library-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #222;
+            margin-bottom: 3px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.35;
+        }
+
+        .library-url {
+            font-size: 9px;
+            font-family: 'Courier New', monospace;
+            color: #999;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-bottom: 7px;
+        }
+
+        .library-push-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 6px;
+        }
+
+        .library-push-controls select {
+            width: 100%;
+            padding: 3px 5px;
+            font-size: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            color: #333;
+        }
+
+        .library-mode-toggle {
+            display: flex;
+            gap: 3px;
+        }
+
+        .library-mode-btn {
+            flex: 1;
+            padding: 3px 0;
+            font-size: 10px;
+            font-weight: 600;
+            border: 1px solid #e0e0e0;
+            border-radius: 3px;
+            cursor: pointer;
+            background: #f5f5f5;
+            color: #666;
+            transition: all 0.15s;
+        }
+
+        .library-mode-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .library-card-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .library-push-btn {
+            flex: 2;
+            padding: 5px 0;
+            font-size: 10px;
+            font-weight: 700;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #e3f0ff;
+            color: #1565c0;
+            transition: background 0.2s;
+        }
+
+        .library-push-btn:hover {
+            background: #bbdefb;
+        }
+
+        .library-remove-btn {
+            flex: 1;
+            padding: 5px 0;
+            font-size: 10px;
+            font-weight: 600;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #f5f5f5;
+            color: #9e9e9e;
+            transition: background 0.2s;
+        }
+
+        .library-remove-btn:hover {
+            background: #ffcdd2;
+            color: #c62828;
+        }
     </style>
 </head>
 <body>
+    <!-- Left Column: Library + Category Queue Panels -->
+    <div class="left-column">
+
+    <!-- Library Queue Panel -->
+    <div class="library-panel">
+        <div class="library-panel-header">
+            <h3>📚 Library Queue</h3>
+            <div class="library-add-row">
+                <input
+                    type="text"
+                    id="libraryInput"
+                    placeholder="Paste a YouTube URL to save for later…"
+                    onkeypress="handleLibraryKeyPress(event)"
+                >
+                <button class="library-add-btn" onclick="addToLibraryFromInput()">＋ Save</button>
+            </div>
+        </div>
+        <div class="library-cards-row" id="libraryCardsList">
+            <div class="library-empty">Library is empty — paste a URL above to save it for later</div>
+        </div>
+    </div>
+
     <!-- Queue Panel (Left Side) -->
     <div class="multi-queue-container">
         <!-- Tech Queue Panel -->
@@ -770,6 +1035,8 @@
             </div>
         </div>
     </div>
+
+    </div><!-- /.left-column -->
 
     <div class="container">
         <!-- <div class="header">
@@ -947,6 +1214,9 @@
         let currentMode = 'youtube';
         let currentUrl = '';
         
+        // Library queue state
+        let libraryData = [];
+
         // Auto-processor state
         let isProcessing = false;
         let autoProcessorEnabled = true;
@@ -955,6 +1225,7 @@
         
         // Initialize auto-processor on page load
         document.addEventListener('DOMContentLoaded', function() {
+            loadLibraryFromStorage();
             loadQueuesFromStorage();
 
             // Acquire wake lock immediately if items were restored from a previous session
@@ -1323,7 +1594,156 @@
             saveQueuesToStorage();
             renderFailedCards(category);
         }
-        
+
+        // ---- Library Queue ----
+
+        function loadLibraryFromStorage() {
+            try {
+                const raw = localStorage.getItem('libraryQueue') || '[]';
+                libraryData = JSON.parse(raw);
+                if (!Array.isArray(libraryData)) libraryData = [];
+            } catch (_) {
+                libraryData = [];
+            }
+            renderLibraryCards();
+        }
+
+        function saveLibraryToStorage() {
+            localStorage.setItem('libraryQueue', JSON.stringify(libraryData));
+        }
+
+        function handleLibraryKeyPress(event) {
+            if (event.key === 'Enter') addToLibraryFromInput();
+        }
+
+        function addToLibraryFromInput() {
+            const input = document.getElementById('libraryInput');
+            const url = input.value.trim();
+            if (!url) return;
+
+            if (libraryData.some(i => i.url === url)) {
+                showStatus('URL is already in the library', 'info');
+                return;
+            }
+
+            const uid = Math.random().toString(36).slice(2, 9);
+            libraryData.push({ uid, url, title: null, targetCategory: 'tech', fetchMode: 'transcript' });
+            saveLibraryToStorage();
+            renderLibraryCards();
+            input.value = '';
+
+            const videoId = extractVideoId(url);
+            if (videoId) fetchLibraryTitle(uid, videoId);
+        }
+
+        async function fetchLibraryTitle(uid, videoId) {
+            try {
+                const res = await fetch(
+                    `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+                );
+                if (!res.ok) return;
+                const data = await res.json();
+                const item = libraryData.find(i => i.uid === uid);
+                if (!item) return;
+                item.title = data.title || null;
+                saveLibraryToStorage();
+                renderLibraryCards();
+            } catch (_) {
+                // oEmbed unavailable — card shows without title
+            }
+        }
+
+        function setLibraryCategory(uid, category) {
+            const item = libraryData.find(i => i.uid === uid);
+            if (!item) return;
+            item.targetCategory = category;
+            saveLibraryToStorage();
+        }
+
+        function setLibraryMode(uid, mode) {
+            const item = libraryData.find(i => i.uid === uid);
+            if (!item) return;
+            item.fetchMode = mode;
+            saveLibraryToStorage();
+            renderLibraryCards();
+        }
+
+        function pushLibraryItemToQueue(uid) {
+            const item = libraryData.find(i => i.uid === uid);
+            if (!item) return;
+            const { url, targetCategory, fetchMode } = item;
+            const queueEl = fetchMode === 'audio'
+                ? document.getElementById(`${targetCategory}AudioQueueList`)
+                : document.getElementById(`${targetCategory}QueueList`);
+            const existing = queueEl.value.trim();
+            queueEl.value = existing ? `${existing}\n${url}` : url;
+            saveQueuesToStorage();
+            syncWakeLock();
+            if (!isProcessing) processNextLink();
+            const modeLabel = fetchMode === 'audio' ? 'Audio' : 'Transcript';
+            showStatus(`↗ Pushed to ${targetCategory} ${modeLabel} queue`, 'success');
+        }
+
+        function removeFromLibrary(uid) {
+            const idx = libraryData.findIndex(i => i.uid === uid);
+            if (idx === -1) return;
+            libraryData.splice(idx, 1);
+            saveLibraryToStorage();
+            renderLibraryCards();
+        }
+
+        function renderLibraryCards() {
+            const container = document.getElementById('libraryCardsList');
+            if (libraryData.length === 0) {
+                container.innerHTML = '<div class="library-empty">Library is empty — paste a URL above to save it for later</div>';
+                return;
+            }
+            container.innerHTML = libraryData.map(item => {
+                const { uid, url, title, targetCategory, fetchMode } = item;
+                const videoId = extractVideoId(url);
+
+                const mediaHtml = videoId
+                    ? `<img class="library-thumbnail" src="https://img.youtube.com/vi/${videoId}/hqdefault.jpg" alt="thumbnail" onerror="this.style.display='none'">`
+                    : `<div class="library-thumbnail-placeholder">📰</div>`;
+
+                const safeUrl = url.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                const titleHtml = videoId
+                    ? (title
+                        ? `<div class="library-title" title="${title.replace(/"/g, '&quot;')}">${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`
+                        : `<div class="library-title" style="color:#aaa;font-style:italic;">Loading title…</div>`)
+                    : `<div class="library-title">${safeUrl}</div>`;
+
+                const cats = ['tech', 'social', 'science'];
+                const catOptions = cats.map(c =>
+                    `<option value="${c}"${c === targetCategory ? ' selected' : ''}>${c.charAt(0).toUpperCase() + c.slice(1)}</option>`
+                ).join('');
+
+                const tActive = fetchMode === 'transcript' ? ' active' : '';
+                const aActive = fetchMode === 'audio' ? ' active' : '';
+
+                return `
+                <div class="library-card">
+                    ${mediaHtml}
+                    <div class="library-card-body">
+                        ${titleHtml}
+                        <div class="library-url" title="${safeUrl}">${safeUrl}</div>
+                        <div class="library-push-controls">
+                            <select onchange="setLibraryCategory('${uid}', this.value)">${catOptions}</select>
+                            <div class="library-mode-toggle">
+                                <button class="library-mode-btn${tActive}" onclick="setLibraryMode('${uid}', 'transcript')">📋 T</button>
+                                <button class="library-mode-btn${aActive}" onclick="setLibraryMode('${uid}', 'audio')">🎵 A</button>
+                            </div>
+                        </div>
+                        <div class="library-card-actions">
+                            <button class="library-push-btn" onclick="pushLibraryItemToQueue('${uid}')">↗ Push to Queue</button>
+                            <button class="library-remove-btn" onclick="removeFromLibrary('${uid}')">✕</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
         function handleFileSelect(event) {
             const files = Array.from(event.target.files);
             selectedFiles = [...selectedFiles, ...files];
