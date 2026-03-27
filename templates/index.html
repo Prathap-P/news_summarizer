@@ -10,11 +10,16 @@
             padding: 0;
             box-sizing: border-box;
         }
+
+        html {
+            overflow-x: auto;
+        }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            min-width: max-content;
             padding: 20px;
             display: flex;
             gap: 20px;
@@ -22,8 +27,7 @@
         }
         
         .container {
-            flex: 1;
-            max-width: 900px;
+            flex: 0 0 860px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -288,17 +292,15 @@
         .multi-queue-container {
             display: flex;
             gap: 15px;
-            margin-bottom: 20px;
         }
         
         .queue-panel {
-            flex: 1;
+            flex-shrink: 0;
+            width: 280px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             padding: 15px;
-            min-width: 280px;
-            max-width: 350px;
         }
 
         .queue-panel h3 {
@@ -368,7 +370,8 @@
         }
 
         .email-panel {
-            width: 320px;
+            flex-shrink: 0;
+            width: 300px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -634,6 +637,7 @@
             flex-direction: column;
             gap: 15px;
             align-items: stretch;
+            flex-shrink: 0;
         }
 
         /* ---- Library Queue Panel ---- */
@@ -1527,8 +1531,16 @@
         }
 
         function extractVideoId(url) {
-            const m = url.match(/[?&]v=([^&]+)/);
-            return m ? m[1] : null;
+            // Standard watch URL: ?v=ID or &v=ID
+            let m = url.match(/[?&]v=([^&]+)/);
+            if (m) return m[1];
+            // Short URL: youtu.be/ID
+            m = url.match(/youtu\.be\/([^?&/]+)/);
+            if (m) return m[1];
+            // Shorts URL: /shorts/ID
+            m = url.match(/\/shorts\/([^?&/]+)/);
+            if (m) return m[1];
+            return null;
         }
 
         function renderFailedCards(category) {
@@ -1682,6 +1694,7 @@
             if (!isProcessing) processNextLink();
             const modeLabel = fetchMode === 'audio' ? 'Audio' : 'Transcript';
             showStatus(`↗ Pushed to ${targetCategory} ${modeLabel} queue`, 'success');
+            removeFromLibrary(uid);
         }
 
         function removeFromLibrary(uid) {
