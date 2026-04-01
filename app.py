@@ -56,7 +56,7 @@ window_memory_100 = ConversationBufferWindowMemory(k=100)
 conversation_chain = None
 current_mode = None
 session_history = InMemoryChatMessageHistory()
-current_model_key = "mlx_community_qwen_stream_local_llm"
+current_model_key = os.getenv("DEFAULT_MODEL_KEY", "mlx_community_qwen_stream_local_llm")
 current_model = get_model(current_model_key)
 
 def check_llm_server():

@@ -11,6 +11,7 @@ Flow:
 
 import gc
 import multiprocessing as mp
+import os
 import platform
 import queue as _stdlib_queue
 from datetime import datetime
@@ -25,7 +26,7 @@ import yt_dlp
 YT_AUDIO_DIR = Path("yt_audio")
 YT_AUDIO_DIR.mkdir(exist_ok=True)
 
-WHISPER_MODEL = "mlx-community/whisper-large-v3-mlx"
+WHISPER_MODEL = os.getenv("WHISPER_MODEL_ID", "mlx-community/whisper-large-v3-mlx")
 DURATION_WARNING_THRESHOLD_SECONDS = 90 * 60
 
 # Platform guard: Metal memory cache only exists on Apple Silicon.

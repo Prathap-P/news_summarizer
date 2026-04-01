@@ -2,7 +2,7 @@
 from dotenv import load_dotenv
 import os
 from main import read_website_content
-from langchain_groq import ChatGroq
+from llm_models import get_model
 from rich.console import Console
 from rich.markdown import Markdown
 
@@ -10,12 +10,7 @@ from rich.markdown import Markdown
 load_dotenv()
 
 # %%
-groq_llm = ChatGroq(
-    model= "openai/gpt-oss-20b",
-    api_key= os.getenv("GROQ_API_KEY"),
-    temperature= 0.3,
-    max_tokens= 1000,
-)
+groq_llm = get_model("groq_llm")
 
 # %%
 def summarize_article(content):

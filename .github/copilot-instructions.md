@@ -15,7 +15,9 @@ condensation_cache.py          # Checkpoint manager — atomic JSON, 24h TTL, re
 llm_models.py                  # All LLM instances; get_model() factory
 system_prompts.py              # All prompt strings (news, YouTube, map/reduce)
 utils.py                       # remove_thinking_tokens(), backup file helpers
-kokoro_tts.py                  # generate_audio(), create_audio_file()
+audio_config.py                # ASR/TTS backend selection via env vars
+kokoro_tts.py                  # generate_audio(), create_audio_file() — Kokoro backend
+qwen_omni_backend.py           # generate_audio_qwen(), get_transcript_via_qwen() — Qwen2.5-Omni backend
 email_sender.py                # send_email_with_audio/attachments
 telegram_sender.py             # send_telegram_with_audio/attachments
 templates/index.html           # Single-page frontend with Transcript + Audio queues
@@ -38,6 +40,61 @@ yt_audio/                      # Audio downloaded by yt-dlp for Whisper transcri
 - Acronyms must be expanded on first use; numbers written in natural-reading form.
 - All LLM responses are piped through `remove_thinking_tokens()` in `utils.py` before TTS. This function expects `<final_script>...</final_script>` tags around the model's final output.
 - `remove_thinking_tokens()` returns `(text, False)` if tags are missing — always check the boolean and log a `[WARNING]` before continuing.
+
+### ASR / TTS Backend Selection (`audio_config.py`)
+
+The ASR and TTS backends are configurable via environment variables — no code change needed to switch:
+
+| Variable | Default | Options |
+|---|---|---|
+| `ASR_BACKEND` | `qwen_omni` | `qwen_omni`, `whisper` |
+| `TTS_BACKEND` | `qwen_omni` | `qwen_omni`, `kokoro` |
+| `QWEN_OMNI_MODEL_ID` | `Qwen/Qwen2.5-Omni-3B` | Any HF model ID |
+| `QWEN_OMNI_SPEAKER` | `Chelsie` | `Chelsie` (female), `Ethan` (male) |
+
+`app.py` imports the correct backend at startup based on these values:
+```python
+from audio_config import ASR_BACKEND, TTS_BACKEND
+if ASR_BACKEND == "qwen_omni":
+    from qwen_omni_backend import get_transcript_via_qwen as get_transcript_via_whisper
+else:
+    from whisper_transcriber import get_transcript_via_whisper
+
+if TTS_BACKEND == "qwen_omni":
+    from qwen_omni_backend import generate_audio_qwen as generate_audio
+    from kokoro_tts import create_audio_file
+else:
+    from kokoro_tts import generate_audio, create_audio_file
+```
+
+All call sites (`generate_audio()`, `create_audio_file()`, `get_transcript_via_whisper()`) remain unchanged — the aliasing at import time is the entire switching mechanism.
+
+**`create_audio_file()` is always imported from `kokoro_tts`** regardless of `TTS_BACKEND` — it is backend-agnostic (accepts any 24 kHz float32 numpy array and writes a `.wav` file).
+
+### Qwen2.5-Omni Backend (`qwen_omni_backend.py`)
+
+- **Model**: `Qwen/Qwen2.5-Omni-3B` (default). Any `Qwen2.5-Omni-*` variant is supported via `QWEN_OMNI_MODEL_ID`.
+- **Single model for both ASR and TTS** — loaded once, reused for both paths via module-level lazy singleton (`_model`, `_processor`).
+- **Lazy loading**: model is NOT loaded at import time. First call to `generate_audio_qwen()` or `get_transcript_via_qwen()` triggers `_get_model()`.
+- **Apple Silicon**: loads with `device_map={"":"mps"}` and `torch_dtype=torch.float16`. On other platforms: `device_map="auto"`, `torch_dtype="auto"`.
+- **Processor**: `Qwen2_5OmniProcessor.from_pretrained(model_id, use_fast=True)`.
+
+**TTS path** (`generate_audio_qwen`):
+- Required system prompt: `"You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."`
+- Every message's `content` must be a **list of dicts** (`[{"type": "text", "text": "..."}]`), including the system message — never a bare string.
+- Call: `model.generate(**inputs, use_audio_in_video=False, speaker=QWEN_OMNI_SPEAKER)`
+- Audio extracted via: `out.waveform if hasattr(out, "waveform") else out[1]`
+- Returns 24 kHz float32 numpy array — same contract as Kokoro's `generate_audio()`.
+
+**ASR path** (`get_transcript_via_qwen`):
+- Reuses `download_audio()` and `get_video_duration()` from `whisper_transcriber.py` (lazy import inside function).
+- Call: `model.generate(**inputs, use_audio_in_video=False, return_audio=False)`
+- Decode: `processor.batch_decode(ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)` where `ids = output.sequences if hasattr(output, "sequences") else output`
+- Returns plain text string or `"Error: ..."` on failure — same contract as `get_transcript_via_whisper()`.
+
+**Memory management**: both functions release MPS memory via `torch.mps.empty_cache()` in a `finally` block. GPU tensors are explicitly `del`-ed before the `finally` runs so the cache clear is effective.
+
+**`process_mm_info`** from `qwen_omni_utils` is imported at module level (not per-call). If the package is missing, an `ImportError` with a clear message is raised at import time.
 
 ### YouTube Transcript Strategy — Two Hard-Separated Paths
 
@@ -114,14 +171,16 @@ A single fixed button (bottom-right) handles both retry paths:
 - Failed cards are **not** cleared by the retry — use the per-card ↺ Retry or ✕ Dismiss buttons to remove individual items.
 
 ### Whisper Memory Management
-`transcribe_audio()` always releases GPU memory in a `finally` block:
+`transcribe_audio()` in `whisper_transcriber.py` always releases GPU memory in a `finally` block:
 ```python
 finally:
     gc.collect()
     if _IS_APPLE_SILICON:          # guarded — no-op on Linux/CUDA
-        mx.metal.clear_cache()
+        mx.metal.clear_cache()     # MLX Metal pool (mlx-whisper)
 ```
-This frees ~3 GB of MLX buffers after each transcription instead of holding them for the Flask process lifetime.
+This frees ~3 GB of MLX buffers after each transcription.
+
+The Qwen Omni backend uses an equivalent pattern with `torch.mps.empty_cache()` (PyTorch MPS pool) instead of `mx.metal.clear_cache()` — the two models use separate Metal memory pools.
 
 ### Logging Style
 ```python
@@ -147,6 +206,24 @@ Use structured `[LEVEL]` prefixes consistently. Do not use the `logging` module.
 | `TELEGRAM_CHAT_ID_TECH` | Tech discussion group ID |
 | `TELEGRAM_CHAT_ID_SOCIAL` | Social discussion group ID |
 | `TELEGRAM_CHAT_ID_SCIENCE` | Science discussion group ID |
+| `ASR_BACKEND` | `qwen_omni` (default) or `whisper` |
+| `TTS_BACKEND` | `qwen_omni` (default) or `kokoro` |
+| `QWEN_OMNI_MODEL_ID` | HuggingFace model ID (default: `Qwen/Qwen2.5-Omni-3B`) |
+| `QWEN_OMNI_SPEAKER` | TTS voice: `Chelsie` (default, female) or `Ethan` (male) |
+| `DEFAULT_MODEL_KEY` | Startup LLM key from `models_collection` (default: `mlx_community_qwen_stream_local_llm`) |
+| `LM_STUDIO_BASE_URL` | LM Studio OpenAI-compatible endpoint (default: `http://localhost:1234/v1`) |
+| `GROQ_MODEL_ID` | Groq model ID (default: `openai/gpt-oss-20b`) |
+| `GEMMA_MODEL_ID` | Gemma local model ID (default: `google/gemma-3-27b`) |
+| `NEMOTRON_MODEL_ID` | Nemotron local model ID (default: `nvidia/nemotron-3-nano`) |
+| `NEMOTRON_STREAM_MODEL_ID` | Nemotron streaming model ID (default: `nvidia/nemotron-3-nano`) |
+| `NEXVERIDIAN_QWEN_MODEL_ID` | Nexveridian Qwen model ID (default: `nexveridian/qwen3.5-35b-a3b`) |
+| `MLX_QWEN_MODEL_ID` | MLX Qwen model ID (default: `mlx-community/qwen3.5-35b-a3b`) |
+| `DEEPSEEK_MODEL_ID` | DeepSeek model ID (default: `deepseek/deepseek-r1-0528-qwen3-8b`) |
+| `GPT_OSS_MODEL_ID` | GPT OSS model ID (default: `openai/gpt-oss-20b`) |
+| `MISTRAL_MODEL_ID` | Mistral model ID (default: `mlx-community/Mistral-7B-Instruct-v0.3-4bit`) |
+| `KOKORO_LANG_CODE` | Kokoro language code (default: `a` = American English) |
+| `KOKORO_VOICE` | Kokoro TTS voice name (default: `af_sarah`) |
+| `WHISPER_MODEL_ID` | Whisper model ID (default: `mlx-community/whisper-large-v3-mlx`) |
 
 Load with `load_dotenv()` at module top, then `os.getenv("KEY")`. Never hardcode credentials.
 
@@ -176,9 +253,20 @@ python news_reader.py
 
 Add new packages to `pyproject.toml` only — do not create a separate `requirements.txt`.
 
+**New dependencies added for Qwen Omni backend** (already in `pyproject.toml`):
+- `accelerate==1.13.0` — required by `transformers` for `device_map`
+- `qwen-omni-utils==0.0.9` — `process_mm_info()` helper
+- `torchvision==0.26.0` — required by `Qwen2_5OmniProcessor` even for audio-only use
+- `soxr==1.0.0` — audio resampling dependency of `qwen-omni-utils`
+- `torch==2.11.0`, `torchaudio==2.11.0` — upgraded from 2.9.1 to satisfy torchvision
+
 ## Pitfalls
 - **LM Studio must be running on port 1234** before `app.py` starts if using local models.
 - **Kokoro TTS** needs CUDA or Apple Silicon MPS; CPU fallback is very slow.
+- **Kokoro + PyTorch 2.11+** emits a `UserWarning` about tensor resize (`resized since it had shape []`). This is a Kokoro `0.9.4` internal bug — audio is generated correctly. It is suppressed with `warnings.filterwarnings("ignore", ...)` scoped to the generator loop in `kokoro_tts.py`.
+- **Qwen2.5-Omni** model (~7 GB) downloads from HuggingFace on first use to `~/.cache/huggingface/hub/`. LM Studio does NOT need to be running for the Qwen backend.
+- **Qwen Omni system message `content` must be a list of dicts**, not a bare string. `process_mm_info` iterates content items by dict key — a plain string causes `TypeError: string indices must be integers`.
+- **`process_mm_info` and `model.generate()` both need `use_audio_in_video=False`** for audio-only / text-only inputs. Missing it from either call causes the model's video decoder to activate and fail.
 - YouTube transcript failures return error strings, not exceptions — always check output before passing to LLM.
 - `ConversationBufferWindowMemory` is global; reset between sessions or context bleeds across users.
 - **Never call `list_transcripts()`** in the transcript path — it fails frequently (bot detection, region locks, private videos). Use `fetch()` directly.
