@@ -103,6 +103,26 @@ mlx_community_qwen_stream_local_llm = ChatOpenAI(
     timeout=3600
 )
 
+google_gemma_4_26b_a4b = ChatOpenAI(
+    base_url=LM_STUDIO_BASE_URL,
+    api_key="test",
+    temperature=0.6,
+    model=os.getenv("GEMMA_4_MODEL_ID", "google/gemma-4-26b-a4b"),
+    top_p=0.9,
+    max_completion_tokens=15000,
+    model_kwargs={
+        "frequency_penalty": 0.3,
+        "presence_penalty": 0.2,
+    },
+    extra_body={
+        "min_p": 0,
+        "repeat_penalty": 1.15
+    },
+    # streaming=True,
+    # stream_usage=True,
+    timeout=3600
+)
+
 deepseekR1_local_llm = ChatOpenAI(
     base_url=LM_STUDIO_BASE_URL,
     api_key="test",
@@ -148,6 +168,7 @@ models_collection = {
     "nemotron_stream_local_llm": nemotron_stream_local_llm,
     "nexveridian_qwen_stream_local_llm": nexveridian_qwen_stream_local_llm,
     "mlx_community_qwen_stream_local_llm": mlx_community_qwen_stream_local_llm,
+    "google_gemma_4_26b_a4b": google_gemma_4_26b_a4b,
     "deepseekR1_local_llm": deepseekR1_local_llm,
     "gpt-oss_20b_local_llm": gpt_oss_20b_local_llm,
     "mistral_local_llm": mistral_local_llm
